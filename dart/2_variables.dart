@@ -1,5 +1,3 @@
-// filepath: /workspaces/flutter_gallery/dart/variables.dart
-
 void main() {
   // 1. Variable Declaration
   // ----------------------
