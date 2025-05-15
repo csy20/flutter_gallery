@@ -59,9 +59,7 @@ The Flutter section is under development and will include:
 
 Contributions, issues, and feature requests are welcome! Feel free to check [issues page](#) if you want to contribute.
 
-## 📜 License
 
-This project is [MIT](#) licensed.
 
 ---
 
