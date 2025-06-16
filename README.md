@@ -26,14 +26,11 @@ Explore more complex Dart programming concepts:
 - `1_oops.dart`, `2_oops.dart`, `3_oops.dart` - Object-oriented programming principles
 - `4_asynchronus_1.dart`, `5_asynchronus_2.dart` - Asynchronous programming with Futures and async/await
 
-### 3. Flutter (Coming Soon)
-The Flutter section is under development and will include:
-- UI components and widgets
-- State management
-- Navigation
-- Persistent storage
-- API integration
-- Complete app examples
+### 3. Key DSA topic 
+It only cover some of the key dsa topics only :
+- -Data_sructure covering imp data structure 
+- -Algorithm covering most imp alogrithm 
+<img src ='https://pbs.twimg.com/media/GkksM1SXsAAZWvo?format=png&name=900x900' width = '1000'>
 
 ## 🚀 How to Use This Repository
 
