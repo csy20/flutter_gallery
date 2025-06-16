@@ -54,7 +54,7 @@ It only cover some of the key dsa topics only :
 
 ## 🤝 Contributing
 
-Contributions, issues, and feature requests are welcome! Feel free to check [issues page](#) if you want to contribute.
+Contributions, issues, and feature requests are welcome! 
 
 
 
