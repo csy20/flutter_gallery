@@ -81,6 +81,75 @@ Matrix:   A B C D
        D [0 1 1 0]
 ```
 
+**Dart Implementation:**
+```dart
+class GraphMatrix {
+  List<List<int>> matrix;
+  int vertices;
+  
+  GraphMatrix(this.vertices) {
+    matrix = List.generate(vertices, (i) => List.filled(vertices, 0));
+  }
+  
+  // Add edge between vertices u and v
+  void addEdge(int u, int v, {bool directed = false}) {
+    matrix[u][v] = 1;
+    if (!directed) {
+      matrix[v][u] = 1; // For undirected graph
+    }
+  }
+  
+  // Remove edge between vertices u and v
+  void removeEdge(int u, int v, {bool directed = false}) {
+    matrix[u][v] = 0;
+    if (!directed) {
+      matrix[v][u] = 0;
+    }
+  }
+  
+  // Check if edge exists
+  bool hasEdge(int u, int v) {
+    return matrix[u][v] == 1;
+  }
+  
+  // Get all neighbors of vertex u
+  List<int> getNeighbors(int u) {
+    List<int> neighbors = [];
+    for (int v = 0; v < vertices; v++) {
+      if (matrix[u][v] == 1) {
+        neighbors.add(v);
+      }
+    }
+    return neighbors;
+  }
+  
+  // Print the matrix
+  void printMatrix() {
+    print('Adjacency Matrix:');
+    for (int i = 0; i < vertices; i++) {
+      print(matrix[i]);
+    }
+  }
+}
+
+// Example usage
+void demonstrateAdjacencyMatrix() {
+  GraphMatrix graph = GraphMatrix(4);
+  
+  // Add edges: 0-1, 0-2, 1-3, 2-3
+  graph.addEdge(0, 1);
+  graph.addEdge(0, 2);
+  graph.addEdge(1, 3);
+  graph.addEdge(2, 3);
+  
+  graph.printMatrix();
+  
+  print('Neighbors of vertex 0: ${graph.getNeighbors(0)}');
+  print('Edge exists between 0 and 1: ${graph.hasEdge(0, 1)}');
+  print('Edge exists between 0 and 3: ${graph.hasEdge(0, 3)}');
+}
+```
+
 **Pros:**
 - O(1) edge lookup
 - Simple implementation
@@ -101,6 +170,77 @@ C: [A, D]
 D: [B, C]
 ```
 
+**Dart Implementation:**
+```dart
+class GraphList {
+  Map<int, List<int>> adjacencyList;
+  int vertices;
+  
+  GraphList(this.vertices) {
+    adjacencyList = {};
+    for (int i = 0; i < vertices; i++) {
+      adjacencyList[i] = [];
+    }
+  }
+  
+  // Add edge between vertices u and v
+  void addEdge(int u, int v, {bool directed = false}) {
+    adjacencyList[u]!.add(v);
+    if (!directed) {
+      adjacencyList[v]!.add(u); // For undirected graph
+    }
+  }
+  
+  // Remove edge between vertices u and v
+  void removeEdge(int u, int v, {bool directed = false}) {
+    adjacencyList[u]!.remove(v);
+    if (!directed) {
+      adjacencyList[v]!.remove(u);
+    }
+  }
+  
+  // Check if edge exists
+  bool hasEdge(int u, int v) {
+    return adjacencyList[u]!.contains(v);
+  }
+  
+  // Get all neighbors of vertex u
+  List<int> getNeighbors(int u) {
+    return List.from(adjacencyList[u]!);
+  }
+  
+  // Print the adjacency list
+  void printList() {
+    print('Adjacency List:');
+    adjacencyList.forEach((vertex, neighbors) {
+      print('$vertex: $neighbors');
+    });
+  }
+  
+  // Get degree of a vertex
+  int getDegree(int u) {
+    return adjacencyList[u]!.length;
+  }
+}
+
+// Example usage
+void demonstrateAdjacencyList() {
+  GraphList graph = GraphList(4);
+  
+  // Add edges: 0-1, 0-2, 1-3, 2-3
+  graph.addEdge(0, 1);
+  graph.addEdge(0, 2);
+  graph.addEdge(1, 3);
+  graph.addEdge(2, 3);
+  
+  graph.printList();
+  
+  print('Neighbors of vertex 0: ${graph.getNeighbors(0)}');
+  print('Degree of vertex 0: ${graph.getDegree(0)}');
+  print('Edge exists between 0 and 1: ${graph.hasEdge(0, 1)}');
+}
+```
+
 **Pros:**
 - O(V + E) space complexity
 - Efficient for sparse graphs
@@ -116,6 +256,91 @@ Simple list of all edges in the graph.
 **Example:**
 ```
 [(A,B), (A,C), (B,D), (C,D)]
+```
+
+**Dart Implementation:**
+```dart
+class Edge {
+  int u, v;
+  int? weight;
+  
+  Edge(this.u, this.v, [this.weight]);
+  
+  @override
+  String toString() {
+    return weight != null ? '($u,$v,$weight)' : '($u,$v)';
+  }
+}
+
+class GraphEdgeList {
+  List<Edge> edges;
+  int vertices;
+  
+  GraphEdgeList(this.vertices) : edges = [];
+  
+  // Add edge between vertices u and v
+  void addEdge(int u, int v, {int? weight, bool directed = false}) {
+    edges.add(Edge(u, v, weight));
+    if (!directed) {
+      edges.add(Edge(v, u, weight)); // For undirected graph
+    }
+  }
+  
+  // Remove edge between vertices u and v
+  void removeEdge(int u, int v) {
+    edges.removeWhere((edge) => 
+      (edge.u == u && edge.v == v) || (edge.u == v && edge.v == u));
+  }
+  
+  // Check if edge exists
+  bool hasEdge(int u, int v) {
+    return edges.any((edge) => 
+      (edge.u == u && edge.v == v) || (edge.u == v && edge.v == u));
+  }
+  
+  // Get all neighbors of vertex u
+  List<int> getNeighbors(int u) {
+    List<int> neighbors = [];
+    for (Edge edge in edges) {
+      if (edge.u == u) neighbors.add(edge.v);
+      if (edge.v == u) neighbors.add(edge.u);
+    }
+    return neighbors.toSet().toList(); // Remove duplicates
+  }
+  
+  // Print all edges
+  void printEdges() {
+    print('Edge List:');
+    for (Edge edge in edges) {
+      print(edge);
+    }
+  }
+  
+  // Sort edges by weight (useful for MST algorithms)
+  void sortByWeight() {
+    edges.sort((a, b) => (a.weight ?? 0).compareTo(b.weight ?? 0));
+  }
+}
+
+// Example usage
+void demonstrateEdgeList() {
+  GraphEdgeList graph = GraphEdgeList(4);
+  
+  // Add weighted edges
+  graph.addEdge(0, 1, weight: 2);
+  graph.addEdge(0, 2, weight: 1);
+  graph.addEdge(1, 3, weight: 3);
+  graph.addEdge(2, 3, weight: 4);
+  
+  graph.printEdges();
+  
+  print('Neighbors of vertex 0: ${graph.getNeighbors(0)}');
+  
+  // Sort edges by weight
+  graph.sortByWeight();
+  print('\nSorted by weight:');
+  graph.printEdges();
+}
 ```
 
 ---
@@ -167,6 +392,136 @@ BFS explores vertices level by level, visiting all vertices at distance k before
 - Output: 1, 2, 3
 
 **Final Output:** 1 → 2 → 3 → 4 → 5 → 6
+
+### BFS Implementation
+
+```dart
+import 'dart:collection';
+
+class BFS {
+  static List<int> breadthFirstSearch(GraphList graph, int startVertex) {
+    List<int> visited = [];
+    Set<int> visitedSet = {};
+    Queue<int> queue = Queue<int>();
+    
+    // Start with the source vertex
+    queue.add(startVertex);
+    visitedSet.add(startVertex);
+    
+    while (queue.isNotEmpty) {
+      int currentVertex = queue.removeFirst();
+      visited.add(currentVertex);
+      
+      // Visit all neighbors
+      for (int neighbor in graph.getNeighbors(currentVertex)) {
+        if (!visitedSet.contains(neighbor)) {
+          visitedSet.add(neighbor);
+          queue.add(neighbor);
+        }
+      }
+    }
+    
+    return visited;
+  }
+  
+  // BFS to find shortest path in unweighted graph
+  static List<int>? shortestPath(GraphList graph, int start, int target) {
+    if (start == target) return [start];
+    
+    Set<int> visited = {};
+    Queue<List<int>> queue = Queue<List<int>>();
+    
+    queue.add([start]);
+    visited.add(start);
+    
+    while (queue.isNotEmpty) {
+      List<int> path = queue.removeFirst();
+      int currentVertex = path.last;
+      
+      for (int neighbor in graph.getNeighbors(currentVertex)) {
+        if (neighbor == target) {
+          return [...path, neighbor];
+        }
+        
+        if (!visited.contains(neighbor)) {
+          visited.add(neighbor);
+          queue.add([...path, neighbor]);
+        }
+      }
+    }
+    
+    return null; // No path found
+  }
+  
+  // Level-wise BFS (returns vertices grouped by levels)
+  static List<List<int>> levelOrderTraversal(GraphList graph, int startVertex) {
+    List<List<int>> levels = [];
+    Set<int> visited = {};
+    Queue<int> queue = Queue<int>();
+    
+    queue.add(startVertex);
+    visited.add(startVertex);
+    
+    while (queue.isNotEmpty) {
+      int levelSize = queue.length;
+      List<int> currentLevel = [];
+      
+      for (int i = 0; i < levelSize; i++) {
+        int currentVertex = queue.removeFirst();
+        currentLevel.add(currentVertex);
+        
+        for (int neighbor in graph.getNeighbors(currentVertex)) {
+          if (!visited.contains(neighbor)) {
+            visited.add(neighbor);
+            queue.add(neighbor);
+          }
+        }
+      }
+      
+      levels.add(currentLevel);
+    }
+    
+    return levels;
+  }
+}
+
+// Example usage
+void demonstrateBFS() {
+  GraphList graph = GraphList(6);
+  
+  // Create the example graph: 0-1-2 and 0-3, 2-4, 2-5
+  //     0
+  //    / \
+  //   1   3
+  //   |
+  //   2
+  //  / \
+  // 4   5
+  
+  graph.addEdge(0, 1);
+  graph.addEdge(0, 3);
+  graph.addEdge(1, 2);
+  graph.addEdge(2, 4);
+  graph.addEdge(2, 5);
+  
+  print('Graph structure:');
+  graph.printList();
+  
+  print('\nBFS traversal from vertex 0:');
+  List<int> bfsResult = BFS.breadthFirstSearch(graph, 0);
+  print(bfsResult);
+  
+  print('\nLevel-wise traversal from vertex 0:');
+  List<List<int>> levels = BFS.levelOrderTraversal(graph, 0);
+  for (int i = 0; i < levels.length; i++) {
+    print('Level $i: ${levels[i]}');
+  }
+  
+  print('\nShortest path from 0 to 5:');
+  List<int>? path = BFS.shortestPath(graph, 0, 5);
+  print(path ?? 'No path found');
+}
+```
 
 ### BFS Properties
 - **Time Complexity:** O(V + E)
@@ -233,6 +588,163 @@ DFS explores as deep as possible along each branch before backtracking. It uses 
 - Output: 1, 2, 4, 3, 5
 
 **Final Output:** 1 → 2 → 4 → 3 → 5 → 6
+
+### DFS Implementation
+
+```dart
+class DFS {
+  // Recursive DFS
+  static List<int> depthFirstSearch(GraphList graph, int startVertex) {
+    List<int> visited = [];
+    Set<int> visitedSet = {};
+    
+    _dfsRecursive(graph, startVertex, visited, visitedSet);
+    return visited;
+  }
+  
+  static void _dfsRecursive(GraphList graph, int vertex, List<int> visited, Set<int> visitedSet) {
+    visited.add(vertex);
+    visitedSet.add(vertex);
+    
+    for (int neighbor in graph.getNeighbors(vertex)) {
+      if (!visitedSet.contains(neighbor)) {
+        _dfsRecursive(graph, neighbor, visited, visitedSet);
+      }
+    }
+  }
+  
+  // Iterative DFS using stack
+  static List<int> depthFirstSearchIterative(GraphList graph, int startVertex) {
+    List<int> visited = [];
+    Set<int> visitedSet = {};
+    List<int> stack = [startVertex];
+    
+    while (stack.isNotEmpty) {
+      int currentVertex = stack.removeLast();
+      
+      if (!visitedSet.contains(currentVertex)) {
+        visited.add(currentVertex);
+        visitedSet.add(currentVertex);
+        
+        // Add neighbors to stack (in reverse order to maintain left-first traversal)
+        List<int> neighbors = graph.getNeighbors(currentVertex);
+        for (int i = neighbors.length - 1; i >= 0; i--) {
+          if (!visitedSet.contains(neighbors[i])) {
+            stack.add(neighbors[i]);
+          }
+        }
+      }
+    }
+    
+    return visited;
+  }
+  
+  // DFS to detect cycle in undirected graph
+  static bool hasCycle(GraphList graph) {
+    Set<int> visited = {};
+    
+    for (int vertex = 0; vertex < graph.vertices; vertex++) {
+      if (!visited.contains(vertex)) {
+        if (_hasCycleDFS(graph, vertex, -1, visited)) {
+          return true;
+        }
+      }
+    }
+    return false;
+  }
+  
+  static bool _hasCycleDFS(GraphList graph, int vertex, int parent, Set<int> visited) {
+    visited.add(vertex);
+    
+    for (int neighbor in graph.getNeighbors(vertex)) {
+      if (!visited.contains(neighbor)) {
+        if (_hasCycleDFS(graph, neighbor, vertex, visited)) {
+          return true;
+        }
+      } else if (neighbor != parent) {
+        return true; // Back edge found, cycle detected
+      }
+    }
+    return false;
+  }
+  
+  // DFS to find all paths between two vertices
+  static List<List<int>> findAllPaths(GraphList graph, int start, int target) {
+    List<List<int>> allPaths = [];
+    List<int> currentPath = [];
+    Set<int> visited = {};
+    
+    _findPathsDFS(graph, start, target, currentPath, visited, allPaths);
+    return allPaths;
+  }
+  
+  static void _findPathsDFS(GraphList graph, int current, int target, 
+      List<int> currentPath, Set<int> visited, List<List<int>> allPaths) {
+    currentPath.add(current);
+    visited.add(current);
+    
+    if (current == target) {
+      allPaths.add(List.from(currentPath));
+    } else {
+      for (int neighbor in graph.getNeighbors(current)) {
+        if (!visited.contains(neighbor)) {
+          _findPathsDFS(graph, neighbor, target, currentPath, visited, allPaths);
+        }
+      }
+    }
+    
+    // Backtrack
+    currentPath.removeLast();
+    visited.remove(current);
+  }
+  
+  // DFS to check if graph is connected
+  static bool isConnected(GraphList graph) {
+    if (graph.vertices == 0) return true;
+    
+    Set<int> visited = {};
+    _dfsRecursive(graph, 0, [], visited);
+    
+    return visited.length == graph.vertices;
+  }
+}
+
+// Example usage
+void demonstrateDFS() {
+  GraphList graph = GraphList(6);
+  
+  // Create the example graph: 0-1-2 and 0-3, 2-4, 2-5
+  graph.addEdge(0, 1);
+  graph.addEdge(0, 3);
+  graph.addEdge(1, 2);
+  graph.addEdge(2, 4);
+  graph.addEdge(2, 5);
+  
+  print('Graph structure:');
+  graph.printList();
+  
+  print('\nDFS traversal (recursive) from vertex 0:');
+  List<int> dfsResult = DFS.depthFirstSearch(graph, 0);
+  print(dfsResult);
+  
+  print('\nDFS traversal (iterative) from vertex 0:');
+  List<int> dfsIterative = DFS.depthFirstSearchIterative(graph, 0);
+  print(dfsIterative);
+  
+  print('\nAll paths from 0 to 5:');
+  List<List<int>> allPaths = DFS.findAllPaths(graph, 0, 5);
+  for (int i = 0; i < allPaths.length; i++) {
+    print('Path ${i + 1}: ${allPaths[i]}');
+  }
+  
+  print('\nIs graph connected? ${DFS.isConnected(graph)}');
+  print('Does graph have cycle? ${DFS.hasCycle(graph)}');
+  
+  // Add a cycle
+  graph.addEdge(3, 4);
+  print('After adding edge 3-4, does graph have cycle? ${DFS.hasCycle(graph)}');
+}
+```
 
 ### DFS Variants
 1. **Pre-order DFS**: Process vertex before visiting children
@@ -304,6 +816,213 @@ Find shortest paths from a single source to all vertices in a **weighted graph w
 
 **Final shortest distances from A:**
 - A: 0, B: 2, C: 3, D: 4, E: 5, F: 5
+
+### Dijkstra's Algorithm Implementation
+
+```dart
+import 'dart:collection';
+
+class WeightedEdge {
+  int to;
+  int weight;
+  
+  WeightedEdge(this.to, this.weight);
+  
+  @override
+  String toString() => '($to, $weight)';
+}
+
+class WeightedGraph {
+  Map<int, List<WeightedEdge>> adjacencyList;
+  int vertices;
+  
+  WeightedGraph(this.vertices) {
+    adjacencyList = {};
+    for (int i = 0; i < vertices; i++) {
+      adjacencyList[i] = [];
+    }
+  }
+  
+  void addEdge(int u, int v, int weight, {bool directed = false}) {
+    adjacencyList[u]!.add(WeightedEdge(v, weight));
+    if (!directed) {
+      adjacencyList[v]!.add(WeightedEdge(u, weight));
+    }
+  }
+  
+  List<WeightedEdge> getNeighbors(int u) {
+    return adjacencyList[u]!;
+  }
+  
+  void printGraph() {
+    adjacencyList.forEach((vertex, neighbors) {
+      print('$vertex: $neighbors');
+    });
+  }
+}
+
+class DijkstraResult {
+  Map<int, int> distances;
+  Map<int, int?> previous;
+  
+  DijkstraResult(this.distances, this.previous);
+  
+  List<int> getPath(int target) {
+    List<int> path = [];
+    int? current = target;
+    
+    while (current != null) {
+      path.insert(0, current);
+      current = previous[current];
+    }
+    
+    return path;
+  }
+}
+
+class Dijkstra {
+  static DijkstraResult dijkstra(WeightedGraph graph, int source) {
+    Map<int, int> distances = {};
+    Map<int, int?> previous = {};
+    Set<int> visited = {};
+    
+    // Priority queue: [distance, vertex]
+    PriorityQueue<List<int>> pq = PriorityQueue<List<int>>((a, b) => a[0].compareTo(b[0]));
+    
+    // Initialize distances
+    for (int i = 0; i < graph.vertices; i++) {
+      distances[i] = double.maxFinite.toInt();
+      previous[i] = null;
+    }
+    distances[source] = 0;
+    
+    pq.add([0, source]);
+    
+    while (pq.isNotEmpty) {
+      List<int> current = pq.removeFirst();
+      int currentDistance = current[0];
+      int currentVertex = current[1];
+      
+      if (visited.contains(currentVertex)) continue;
+      visited.add(currentVertex);
+      
+      // Check all neighbors
+      for (WeightedEdge edge in graph.getNeighbors(currentVertex)) {
+        int neighbor = edge.to;
+        int weight = edge.weight;
+        int newDistance = currentDistance + weight;
+        
+        if (newDistance < distances[neighbor]!) {
+          distances[neighbor] = newDistance;
+          previous[neighbor] = currentVertex;
+          pq.add([newDistance, neighbor]);
+        }
+      }
+    }
+    
+    return DijkstraResult(distances, previous);
+  }
+}
+
+// Priority Queue implementation
+class PriorityQueue<T> {
+  List<T> _heap = [];
+  final Comparator<T> _compare;
+  
+  PriorityQueue(this._compare);
+  
+  void add(T item) {
+    _heap.add(item);
+    _bubbleUp(_heap.length - 1);
+  }
+  
+  T removeFirst() {
+    if (_heap.isEmpty) throw StateError('Queue is empty');
+    
+    T result = _heap[0];
+    T last = _heap.removeLast();
+    
+    if (_heap.isNotEmpty) {
+      _heap[0] = last;
+      _bubbleDown(0);
+    }
+    
+    return result;
+  }
+  
+  bool get isNotEmpty => _heap.isNotEmpty;
+  
+  void _bubbleUp(int index) {
+    while (index > 0) {
+      int parentIndex = (index - 1) ~/ 2;
+      if (_compare(_heap[index], _heap[parentIndex]) >= 0) break;
+      
+      _swap(index, parentIndex);
+      index = parentIndex;
+    }
+  }
+  
+  void _bubbleDown(int index) {
+    while (true) {
+      int leftChild = 2 * index + 1;
+      int rightChild = 2 * index + 2;
+      int smallest = index;
+      
+      if (leftChild < _heap.length && _compare(_heap[leftChild], _heap[smallest]) < 0) {
+        smallest = leftChild;
+      }
+      
+      if (rightChild < _heap.length && _compare(_heap[rightChild], _heap[smallest]) < 0) {
+        smallest = rightChild;
+      }
+      
+      if (smallest == index) break;
+      
+      _swap(index, smallest);
+      index = smallest;
+    }
+  }
+  
+  void _swap(int i, int j) {
+    T temp = _heap[i];
+    _heap[i] = _heap[j];
+    _heap[j] = temp;
+  }
+}
+
+// Example usage
+void demonstrateDijkstra() {
+  WeightedGraph graph = WeightedGraph(6);
+  
+  // Create the example graph from the explanation
+  graph.addEdge(0, 1, 2);  // A-B: 2
+  graph.addEdge(0, 3, 6);  // A-D: 6
+  graph.addEdge(1, 2, 1);  // B-C: 1
+  graph.addEdge(1, 4, 3);  // B-E: 3
+  graph.addEdge(2, 5, 2);  // C-F: 2
+  graph.addEdge(3, 4, 1);  // D-E: 1
+  graph.addEdge(4, 5, 4);  // E-F: 4
+  
+  print('Weighted Graph:');
+  graph.printGraph();
+  
+  print('\nRunning Dijkstra from vertex 0:');
+  DijkstraResult result = Dijkstra.dijkstra(graph, 0);
+  
+  print('\nShortest distances from vertex 0:');
+  result.distances.forEach((vertex, distance) {
+    print('To vertex $vertex: $distance');
+  });
+  
+  print('\nShortest paths from vertex 0:');
+  for (int i = 0; i < graph.vertices; i++) {
+    if (i != 0) {
+      List<int> path = result.getPath(i);
+      print('To vertex $i: $path (distance: ${result.distances[i]})');
+    }
+  }
+}
+```
 
 #### Properties
 - **Time Complexity:** O((V + E) log V) with binary heap
@@ -431,6 +1150,104 @@ Edges with weights:
 **Final MST:** (A,B,1), (B,C,2), (B,D,4)
 **Total Weight:** 1 + 2 + 4 = 7
 
+### Kruskal's Algorithm Implementation
+
+```dart
+class UnionFind {
+  List<int> parent;
+  List<int> rank;
+  
+  UnionFind(int n) : parent = List.generate(n, (i) => i), rank = List.filled(n, 0);
+  
+  int find(int x) {
+    if (parent[x] != x) {
+      parent[x] = find(parent[x]); // Path compression
+    }
+    return parent[x];
+  }
+  
+  bool union(int x, int y) {
+    int rootX = find(x);
+    int rootY = find(y);
+    
+    if (rootX == rootY) return false; // Already in same set
+    
+    // Union by rank
+    if (rank[rootX] < rank[rootY]) {
+      parent[rootX] = rootY;
+    } else if (rank[rootX] > rank[rootY]) {
+      parent[rootY] = rootX;
+    } else {
+      parent[rootY] = rootX;
+      rank[rootX]++;
+    }
+    
+    return true;
+  }
+}
+
+class MSTEdge {
+  int u, v, weight;
+  
+  MSTEdge(this.u, this.v, this.weight);
+  
+  @override
+  String toString() => '($u-$v: $weight)';
+}
+
+class Kruskal {
+  static List<MSTEdge> kruskalMST(int vertices, List<MSTEdge> edges) {
+    List<MSTEdge> mst = [];
+    UnionFind uf = UnionFind(vertices);
+    
+    // Sort edges by weight
+    edges.sort((a, b) => a.weight.compareTo(b.weight));
+    
+    print('Sorted edges: $edges');
+    
+    for (MSTEdge edge in edges) {
+      if (uf.union(edge.u, edge.v)) {
+        mst.add(edge);
+        print('Added edge: $edge');
+        
+        if (mst.length == vertices - 1) break; // MST complete
+      } else {
+        print('Skipped edge: $edge (would create cycle)');
+      }
+    }
+    
+    return mst;
+  }
+  
+  static int getMSTWeight(List<MSTEdge> mst) {
+    return mst.fold(0, (sum, edge) => sum + edge.weight);
+  }
+}
+
+// Example usage
+void demonstrateKruskal() {
+  List<MSTEdge> edges = [
+    MSTEdge(0, 1, 1),  // A-B: 1
+    MSTEdge(0, 2, 3),  // A-C: 3
+    MSTEdge(1, 2, 2),  // B-C: 2
+    MSTEdge(1, 3, 4),  // B-D: 4
+    MSTEdge(2, 3, 5),  // C-D: 5
+  ];
+  
+  print('Input edges: $edges');
+  print('\nRunning Kruskal\'s Algorithm:');
+  
+  List<MSTEdge> mst = Kruskal.kruskalMST(4, edges);
+  
+  print('\nMinimum Spanning Tree:');
+  for (MSTEdge edge in mst) {
+    print(edge);
+  }
+  
+  print('\nTotal MST weight: ${Kruskal.getMSTWeight(mst)}');
+}
+```
+
 #### Properties
 - **Time Complexity:** O(E log E) due to sorting
 - **Space Complexity:** O(V) for Union-Find
@@ -466,6 +1283,122 @@ Greedy algorithm that grows MST one vertex at a time, always adding minimum weig
 - Choose minimum: (B,D,4)
 
 **Final MST:** Same as Kruskal's result
+
+### Prim's Algorithm Implementation
+
+```dart
+class Prim {
+  static List<MSTEdge> primMST(WeightedGraph graph, int startVertex) {
+    List<MSTEdge> mst = [];
+    Set<int> inMST = {startVertex};
+    
+    // Priority queue for edges: [weight, u, v]
+    PriorityQueue<List<int>> pq = PriorityQueue<List<int>>((a, b) => a[0].compareTo(b[0]));
+    
+    // Add all edges from start vertex
+    for (WeightedEdge edge in graph.getNeighbors(startVertex)) {
+      pq.add([edge.weight, startVertex, edge.to]);
+    }
+    
+    print('Starting from vertex $startVertex');
+    
+    while (pq.isNotEmpty && mst.length < graph.vertices - 1) {
+      List<int> current = pq.removeFirst();
+      int weight = current[0];
+      int u = current[1];
+      int v = current[2];
+      
+      // Skip if both vertices are already in MST
+      if (inMST.contains(v)) {
+        print('Skipped edge ($u-$v: $weight) - both vertices in MST');
+        continue;
+      }
+      
+      // Add edge to MST
+      mst.add(MSTEdge(u, v, weight));
+      inMST.add(v);
+      print('Added edge: ($u-$v: $weight)');
+      
+      // Add all edges from new vertex
+      for (WeightedEdge edge in graph.getNeighbors(v)) {
+        if (!inMST.contains(edge.to)) {
+          pq.add([edge.weight, v, edge.to]);
+        }
+      }
+    }
+    
+    return mst;
+  }
+}
+
+// Example usage
+void demonstratePrim() {
+  WeightedGraph graph = WeightedGraph(4);
+  
+  // Create the same graph as Kruskal example
+  graph.addEdge(0, 1, 1);  // A-B: 1
+  graph.addEdge(0, 2, 3);  // A-C: 3
+  graph.addEdge(1, 2, 2);  // B-C: 2
+  graph.addEdge(1, 3, 4);  // B-D: 4
+  graph.addEdge(2, 3, 5);  // C-D: 5
+  
+  print('Weighted Graph:');
+  graph.printGraph();
+  
+  print('\nRunning Prim\'s Algorithm from vertex 0:');
+  List<MSTEdge> mst = Prim.primMST(graph, 0);
+  
+  print('\nMinimum Spanning Tree (Prim\'s):');
+  for (MSTEdge edge in mst) {
+    print(edge);
+  }
+  
+  print('\nTotal MST weight: ${Kruskal.getMSTWeight(mst)}');
+}
+```
+
+### Complete Example: Graph Operations Demo
+
+```dart
+void completeGraphDemo() {
+  print('=== GRAPH OPERATIONS DEMONSTRATION ===\n');
+  
+  // 1. Graph Representations
+  print('1. GRAPH REPRESENTATIONS:');
+  print('------------------------');
+  demonstrateAdjacencyMatrix();
+  print('');
+  demonstrateAdjacencyList();
+  print('');
+  demonstrateEdgeList();
+  
+  print('\n' + '='*50 + '\n');
+  
+  // 2. Graph Traversals
+  print('2. GRAPH TRAVERSALS:');
+  print('-------------------');
+  demonstrateBFS();
+  print('');
+  demonstrateDFS();
+  
+  print('\n' + '='*50 + '\n');
+  
+  // 3. Shortest Path
+  print('3. SHORTEST PATH (Dijkstra):');
+  print('---------------------------');
+  demonstrateDijkstra();
+  
+  print('\n' + '='*50 + '\n');
+  
+  // 4. Minimum Spanning Tree
+  print('4. MINIMUM SPANNING TREE:');
+  print('-------------------------');
+  print('Kruskal\'s Algorithm:');
+  demonstrateKruskal();
+  print('\nPrim\'s Algorithm:');
+  demonstratePrim();
+}
+```
 
 #### Properties
 - **Time Complexity:** O((V + E) log V) with binary heap
