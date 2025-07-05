@@ -2,15 +2,16 @@
 
 ## Table of Contents
 1. [What is Asynchronous Programming?](#what-is-asynchronous-programming)
-2. [Understanding the Event Loop](#understanding-the-event-loop)
-3. [Futures](#futures)
-4. [Async and Await](#async-and-await)
-5. [Streams](#streams)
-6. [Stream Controllers](#stream-controllers)
-7. [Error Handling in Async Code](#error-handling-in-async-code)
-8. [Isolates](#isolates)
-9. [Advanced Async Patterns](#advanced-async-patterns)
-10. [Best Practices](#best-practices)
+2. [Deep Dive: How Asynchronous Programming Works](#deep-dive-how-asynchronous-programming-works)
+3. [Understanding the Event Loop](#understanding-the-event-loop)
+4. [Futures](#futures)
+5. [Async and Await](#async-and-await)
+6. [Streams](#streams)
+7. [Stream Controllers](#stream-controllers)
+8. [Error Handling in Async Code](#error-handling-in-async-code)
+9. [Isolates](#isolates)
+10. [Advanced Async Patterns](#advanced-async-patterns)
+11. [Best Practices](#best-practices)
 
 ## What is Asynchronous Programming?
 
@@ -22,9 +23,422 @@ Asynchronous programming allows your program to perform multiple operations simu
 - **Scalability**: Handle multiple operations concurrently
 - **User Experience**: Smooth, responsive applications
 
+## Deep Dive: How Asynchronous Programming Works
+
+### 🔍 The Fundamental Problem: Blocking vs Non-Blocking
+
+To understand asynchronous programming, we first need to understand the problem it solves. Let's explore this with detailed examples:
+
+```dart
+import 'dart:io';
+import 'dart:isolate';
+
+// ❌ SYNCHRONOUS (Blocking) - The Problem
+void demonstrateBlockingProblem() {
+  print('=== Blocking Problem Demo ===');
+  
+  print('1. Program starts');
+  print('2. About to make a blocking call...');
+  
+  Stopwatch stopwatch = Stopwatch()..start();
+  
+  // This BLOCKS the entire program for 3 seconds
+  // Nothing else can happen during this time
+  sleep(Duration(seconds: 3));
+  
+  stopwatch.stop();
+  print('3. Blocking call completed after ${stopwatch.elapsedMilliseconds}ms');
+  print('4. Program continues...');
+  
+  // Imagine if this was a UI - it would be completely frozen!
+}
+
+// ✅ ASYNCHRONOUS (Non-blocking) - The Solution
+Future<void> demonstrateNonBlockingSolution() async {
+  print('=== Non-Blocking Solution Demo ===');
+  
+  print('1. Program starts');
+  print('2. About to make a non-blocking call...');
+  
+  Stopwatch stopwatch = Stopwatch()..start();
+  
+  // This DOESN'T block - the program can continue doing other things
+  Future<void> delayedOperation = Future.delayed(Duration(seconds: 3));
+  
+  // While waiting, we can do other work
+  print('3. Doing other work while waiting...');
+  
+  for (int i = 1; i <= 30; i++) {
+    await Future.delayed(Duration(milliseconds: 100));
+    print('   Working... ${i}/30');
+  }
+  
+  // Now wait for the original operation to complete
+  await delayedOperation;
+  
+  stopwatch.stop();
+  print('4. Non-blocking call completed after ${stopwatch.elapsedMilliseconds}ms');
+  print('5. Program continues...');
+}
+```
+
+### 🧠 The Mental Model: How Async Actually Works
+
+Asynchronous programming is based on a simple but powerful concept: **cooperative multitasking**. Here's how it works:
+
+```dart
+// Understanding the async execution model
+class AsyncExecutionModel {
+  static void demonstrateExecutionModel() {
+    print('=== Async Execution Model ===');
+    
+    print('Step 1: Synchronous code runs immediately');
+    
+    // This creates a Future but doesn't wait for it
+    Future<String> futureResult = simulateAsyncWork('Task A', 2000);
+    
+    print('Step 2: Future created, but we continue immediately');
+    print('Step 3: We can do other work while Task A runs in background');
+    
+    // We can create more async operations
+    Future<String> anotherFuture = simulateAsyncWork('Task B', 1000);
+    
+    print('Step 4: Created another Future (Task B)');
+    print('Step 5: Both tasks are now running concurrently');
+    
+    // When we need the results, we wait
+    futureResult.then((result) {
+      print('Step 6: $result');
+    });
+    
+    anotherFuture.then((result) {
+      print('Step 7: $result');
+    });
+    
+    print('Step 8: This prints immediately, before the tasks complete');
+  }
+  
+  static Future<String> simulateAsyncWork(String taskName, int milliseconds) async {
+    print('  $taskName started...');
+    await Future.delayed(Duration(milliseconds: milliseconds));
+    return '$taskName completed after ${milliseconds}ms';
+  }
+}
+```
+
+### 🔧 Under the Hood: How Dart Implements Async
+
+Dart's async implementation is built on several key components:
+
+#### 1. **The Event Loop Architecture**
+
+```dart
+// Simulating how the event loop works conceptually
+class EventLoopSimulation {
+  static final Queue<Function> _eventQueue = Queue<Function>();
+  static final Queue<Function> _microtaskQueue = Queue<Function>();
+  static bool _isRunning = false;
+  
+  // Simplified event loop implementation
+  static void runEventLoop() {
+    if (_isRunning) return;
+    _isRunning = true;
+    
+    print('Event Loop Started');
+    
+    while (_microtaskQueue.isNotEmpty || _eventQueue.isNotEmpty) {
+      // 1. Process all microtasks first (highest priority)
+      while (_microtaskQueue.isNotEmpty) {
+        Function microtask = _microtaskQueue.removeFirst();
+        print('  Executing microtask...');
+        microtask();
+      }
+      
+      // 2. Process one event from event queue
+      if (_eventQueue.isNotEmpty) {
+        Function event = _eventQueue.removeFirst();
+        print('  Executing event...');
+        event();
+      }
+    }
+    
+    print('Event Loop Finished');
+    _isRunning = false;
+  }
+  
+  // Add microtask to queue
+  static void scheduleMicrotask(Function task) {
+    _microtaskQueue.add(task);
+    print('Microtask scheduled');
+  }
+  
+  // Add event to queue
+  static void scheduleEvent(Function event) {
+    _eventQueue.add(event);
+    print('Event scheduled');
+  }
+  
+  static void demonstrate() {
+    print('=== Event Loop Simulation ===');
+    
+    print('1. Scheduling tasks...');
+    scheduleEvent(() => print('Event 1 executed'));
+    scheduleMicrotask(() => print('Microtask 1 executed'));
+    scheduleEvent(() => print('Event 2 executed'));
+    scheduleMicrotask(() => print('Microtask 2 executed'));
+    
+    print('2. Running event loop...');
+    runEventLoop();
+    
+    // Output order:
+    // Microtask 1 executed
+    // Microtask 2 executed  
+    // Event 1 executed
+    // Event 2 executed
+  }
+}
+```
+
+#### 2. **Future State Machine**
+
+```dart
+// Understanding how Futures work internally
+enum FutureState {
+  pending,
+  completed,
+  error
+}
+
+class FutureImplementation<T> {
+  FutureState _state = FutureState.pending;
+  T? _value;
+  Object? _error;
+  List<Function> _onCompleteCallbacks = [];
+  List<Function> _onErrorCallbacks = [];
+  
+  // Constructor for immediate value
+  FutureImplementation.value(T value) {
+    _state = FutureState.completed;
+    _value = value;
+  }
+  
+  // Constructor for error
+  FutureImplementation.error(Object error) {
+    _state = FutureState.error;
+    _error = error;
+  }
+  
+  // Constructor for delayed completion
+  FutureImplementation.delayed(Duration duration, T Function() computation) {
+    Timer(duration, () {
+      try {
+        _value = computation();
+        _state = FutureState.completed;
+        _notifyCallbacks();
+      } catch (e) {
+        _error = e;
+        _state = FutureState.error;
+        _notifyErrorCallbacks();
+      }
+    });
+  }
+  
+  // The .then() method
+  FutureImplementation<R> then<R>(R Function(T) onValue, {Function? onError}) {
+    if (_state == FutureState.completed) {
+      // Already completed - execute immediately
+      try {
+        R result = onValue(_value as T);
+        return FutureImplementation.value(result);
+      } catch (e) {
+        return FutureImplementation.error(e);
+      }
+    } else if (_state == FutureState.error) {
+      // Already has error
+      if (onError != null) {
+        try {
+          dynamic result = onError(_error);
+          return FutureImplementation.value(result);
+        } catch (e) {
+          return FutureImplementation.error(e);
+        }
+      } else {
+        return FutureImplementation.error(_error!);
+      }
+    } else {
+      // Still pending - add callback
+      Completer<R> completer = Completer<R>();
+      
+      _onCompleteCallbacks.add(() {
+        try {
+          R result = onValue(_value as T);
+          completer.complete(result);
+        } catch (e) {
+          completer.completeError(e);
+        }
+      });
+      
+      if (onError != null) {
+        _onErrorCallbacks.add(() {
+          try {
+            dynamic result = onError(_error);
+            completer.complete(result);
+          } catch (e) {
+            completer.completeError(e);
+          }
+        });
+      }
+      
+      return FutureImplementation.fromCompleter(completer);
+    }
+  }
+  
+  // Internal constructor from Completer
+  FutureImplementation.fromCompleter(Completer<T> completer) {
+    completer.future.then((value) {
+      _value = value;
+      _state = FutureState.completed;
+      _notifyCallbacks();
+    }).catchError((error) {
+      _error = error;
+      _state = FutureState.error;
+      _notifyErrorCallbacks();
+    });
+  }
+  
+  void _notifyCallbacks() {
+    for (Function callback in _onCompleteCallbacks) {
+      scheduleMicrotask(callback);
+    }
+    _onCompleteCallbacks.clear();
+  }
+  
+  void _notifyErrorCallbacks() {
+    for (Function callback in _onErrorCallbacks) {
+      scheduleMicrotask(callback);
+    }
+    _onErrorCallbacks.clear();
+  }
+  
+  // Demonstrate the state machine
+  static void demonstrateStateMachine() {
+    print('=== Future State Machine Demo ===');
+    
+    // Create pending future
+    FutureImplementation<String> pendingFuture = FutureImplementation.delayed(
+      Duration(seconds: 2),
+      () => 'Future completed!'
+    );
+    
+    print('1. Future created in pending state');
+    
+    // Add callback before completion
+    pendingFuture.then((value) {
+      print('3. Callback executed: $value');
+    });
+    
+    print('2. Callback registered, waiting for completion...');
+    
+    // Create immediate future
+    FutureImplementation<int> immediateFuture = FutureImplementation.value(42);
+    
+    print('4. Immediate future created');
+    
+    // This callback executes immediately
+    immediateFuture.then((value) {
+      print('5. Immediate callback: $value');
+    });
+  }
+}
+```
+
+#### 3. **Async/Await Transformation**
+
+When you use `async` and `await`, Dart transforms your code behind the scenes:
+
+```dart
+// What you write
+Future<String> fetchUserData() async {
+  String token = await authenticate();
+  String userData = await fetchUser(token);
+  return userData;
+}
+
+// What Dart generates (simplified)
+Future<String> fetchUserDataTransformed() {
+  return authenticate().then((token) {
+    return fetchUser(token).then((userData) {
+      return userData;
+    });
+  });
+}
+
+// Let's demonstrate this transformation
+class AsyncTransformation {
+  static void demonstrateTransformation() {
+    print('=== Async/Await Transformation ===');
+    
+    // Original async/await version
+    processDataAsync().then((result) {
+      print('Async version result: $result');
+    });
+    
+    // Manually transformed version
+    processDataManual().then((result) {
+      print('Manual version result: $result');
+    });
+  }
+  
+  // Using async/await
+  static Future<String> processDataAsync() async {
+    print('1. Starting async process...');
+    
+    String step1 = await simulateStep('Step 1', 1000);
+    print('2. $step1');
+    
+    String step2 = await simulateStep('Step 2', 1000);
+    print('3. $step2');
+    
+    String step3 = await simulateStep('Step 3', 1000);
+    print('4. $step3');
+    
+    return 'All steps completed';
+  }
+  
+  // Manual transformation without async/await
+  static Future<String> processDataManual() {
+    print('1. Starting manual process...');
+    
+    return simulateStep('Step 1', 1000).then((step1) {
+      print('2. $step1');
+      
+      return simulateStep('Step 2', 1000).then((step2) {
+        print('3. $step2');
+        
+        return simulateStep('Step 3', 1000).then((step3) {
+          print('4. $step3');
+          
+          return 'All steps completed';
+        });
+      });
+    });
+  }
+  
+  static Future<String> simulateStep(String stepName, int delay) {
+    return Future.delayed(Duration(milliseconds: delay), () => '$stepName completed');
+  }
+}
+```
+
 ### Synchronous vs Asynchronous Example:
 
 ```dart
+import 'dart:async';
+import 'dart:collection';
+import 'dart:io';
+import 'dart:isolate';
+import 'dart:math';
+
 // ❌ SYNCHRONOUS (Blocking)
 void synchronousExample() {
   print('Starting operation...');
@@ -73,972 +487,482 @@ Future<String> simulateNetworkCall(String apiName, int seconds) async {
 }
 ```
 
-## Understanding the Event Loop
+### 🏗️ Real-World Implementation: Building an Async HTTP Client
 
-Dart runs on a single thread with an event loop that manages asynchronous operations. Understanding this is crucial for effective async programming.
-
-### Event Loop Components:
-
-1. **Call Stack**: Executes synchronous code
-2. **Event Queue**: Holds completed async operations
-3. **Microtask Queue**: High-priority tasks (Futures, scheduleMicrotask)
+Let's build a complete async HTTP client to understand implementation details:
 
 ```dart
-void demonstrateEventLoop() {
-  print('=== Event Loop Demo ===');
-  
-  print('1. Synchronous start');
-  
-  // Microtask - high priority
-  scheduleMicrotask(() => print('4. Microtask executed'));
-  
-  // Future - lower priority than microtask
-  Future(() => print('6. Future from event queue'));
-  
-  // Timer - goes to event queue
-  Timer(Duration.zero, () => print('7. Timer callback'));
-  
-  // Another microtask
-  Future.microtask(() => print('5. Another microtask'));
-  
-  print('2. Synchronous middle');
-  
-  // Immediate Future
-  Future.value('result').then((value) => print('8. Future.value: $value'));
-  
-  print('3. Synchronous end');
-  
-  // Output order:
-  // 1. Synchronous start
-  // 2. Synchronous middle  
-  // 3. Synchronous end
-  // 4. Microtask executed
-  // 5. Another microtask
-  // 6. Future from event queue
-  // 7. Timer callback
-  // 8. Future.value: result
-}
-```
+import 'dart:convert';
+import 'dart:io';
 
-## Futures
-
-A `Future` represents a potential value or error that will be available at some time in the future. It's the foundation of async programming in Dart.
-
-### Future States:
-- **Uncompleted**: Operation is still running
-- **Completed with value**: Operation succeeded
-- **Completed with error**: Operation failed
-
-```dart
-// Basic Future creation and handling
-void demonstrateFutureBasics() {
-  print('=== Future Basics ===');
+class AsyncHttpClient {
+  static const int defaultTimeout = 30000; // 30 seconds
   
-  // Creating Futures
-  Future<String> simpleFuture = Future.value('Hello Future!');
-  Future<String> delayedFuture = Future.delayed(
-    Duration(seconds: 2), 
-    () => 'Delayed result'
-  );
-  Future<int> errorFuture = Future.error('Something went wrong');
-  
-  // Handling Futures with .then()
-  simpleFuture.then((value) => print('Simple: $value'));
-  
-  delayedFuture
-    .then((value) => print('Delayed: $value'))
-    .catchError((error) => print('Error: $error'));
-  
-  errorFuture
-    .then((value) => print('Success: $value'))
-    .catchError((error) => print('Caught error: $error'));
-  
-  // Chaining Futures
-  Future.value(10)
-    .then((value) => value * 2)
-    .then((value) => value + 5)
-    .then((value) => print('Chained result: $value')); // Output: 25
-}
-
-// Complex Future operations
-Future<void> demonstrateComplexFutures() async {
-  print('=== Complex Future Operations ===');
-  
-  // Multiple Futures with Future.wait
-  List<Future<String>> futures = [
-    fetchUserData('user1'),
-    fetchUserData('user2'),
-    fetchUserData('user3'),
-  ];
-  
-  try {
-    List<String> results = await Future.wait(futures);
-    print('All users fetched:');
-    results.forEach(print);
-  } catch (e) {
-    print('Error fetching users: $e');
-  }
-  
-  // Timeout handling
-  try {
-    String result = await fetchDataWithTimeout().timeout(
-      Duration(seconds: 3),
-      onTimeout: () => 'Default value due to timeout',
-    );
-    print('Result with timeout: $result');
-  } catch (e) {
-    print('Timeout error: $e');
-  }
-  
-  // Future.any - first to complete
-  List<Future<String>> competingFutures = [
-    simulateSlowNetwork('Server 1', 5),
-    simulateSlowNetwork('Server 2', 2),
-    simulateSlowNetwork('Server 3', 7),
-  ];
-  
-  String fastest = await Future.any(competingFutures);
-  print('Fastest response: $fastest');
-}
-
-Future<String> fetchUserData(String userId) async {
-  await Future.delayed(Duration(milliseconds: 500));
-  return 'User data for $userId';
-}
-
-Future<String> fetchDataWithTimeout() async {
-  await Future.delayed(Duration(seconds: 5));
-  return 'Data fetched successfully';
-}
-
-Future<String> simulateSlowNetwork(String server, int seconds) async {
-  await Future.delayed(Duration(seconds: seconds));
-  return 'Response from $server';
-}
-
-// Future completion and error handling patterns
-Future<void> demonstrateFuturePatterns() async {
-  print('=== Future Patterns ===');
-  
-  // Completer for manual Future control
-  Completer<String> completer = Completer<String>();
-  
-  // Simulate async operation that completes the Future manually
-  Timer(Duration(seconds: 2), () {
-    if (DateTime.now().millisecond % 2 == 0) {
-      completer.complete('Success!');
-    } else {
-      completer.completeError('Failed!');
+  // Basic GET request implementation
+  static Future<HttpResponse> get(String url, {
+    Map<String, String>? headers,
+    int timeout = defaultTimeout,
+  }) async {
+    print('=== HTTP GET Request ===');
+    print('URL: $url');
+    
+    Stopwatch stopwatch = Stopwatch()..start();
+    
+    try {
+      // Parse URL
+      Uri uri = Uri.parse(url);
+      
+      // Create HTTP client
+      HttpClient client = HttpClient();
+      client.connectionTimeout = Duration(milliseconds: timeout);
+      
+      // Open connection (async)
+      HttpClientRequest request = await client.getUrl(uri);
+      
+      // Add headers
+      if (headers != null) {
+        headers.forEach((key, value) {
+          request.headers.add(key, value);
+        });
+      }
+      
+      print('Request sent, waiting for response...');
+      
+      // Send request and get response (async)
+      HttpClientResponse response = await request.close();
+      
+      // Read response body (async)
+      String responseBody = await response.transform(utf8.decoder).join();
+      
+      stopwatch.stop();
+      
+      HttpResponse result = HttpResponse(
+        statusCode: response.statusCode,
+        body: responseBody,
+        headers: response.headers,
+        responseTime: stopwatch.elapsedMilliseconds,
+      );
+      
+      print('Response received in ${result.responseTime}ms');
+      print('Status: ${result.statusCode}');
+      
+      // Clean up
+      client.close();
+      
+      return result;
+      
+    } catch (e) {
+      stopwatch.stop();
+      print('Request failed after ${stopwatch.elapsedMilliseconds}ms: $e');
+      rethrow;
     }
-  });
-  
-  try {
-    String result = await completer.future;
-    print('Completer result: $result');
-  } catch (e) {
-    print('Completer error: $e');
   }
   
-  // Future.forEach for sequential processing
-  List<int> numbers = [1, 2, 3, 4, 5];
-  await Future.forEach(numbers, (int number) async {
-    await Future.delayed(Duration(milliseconds: 500));
-    print('Processed number: $number');
-  });
-  
-  // Future.doWhile for conditional loops
-  int counter = 0;
-  await Future.doWhile(() async {
-    await Future.delayed(Duration(milliseconds: 300));
-    counter++;
-    print('Counter: $counter');
-    return counter < 3; // Continue while counter < 3
-  });
-}
-```
-
-## Async and Await
-
-The `async` and `await` keywords provide a more readable way to work with Futures, making asynchronous code look similar to synchronous code.
-
-### Key Rules:
-- Functions marked with `async` return a `Future`
-- `await` can only be used inside `async` functions
-- `await` pauses execution until the Future completes
-
-```dart
-// Basic async/await usage
-Future<void> demonstrateAsyncAwait() async {
-  print('=== Async/Await Demo ===');
-  
-  // Sequential execution
-  print('Starting sequential operations...');
-  String result1 = await simulateAsyncOperation('Operation 1', 1);
-  String result2 = await simulateAsyncOperation('Operation 2', 2);
-  String result3 = await simulateAsyncOperation('Operation 3', 1);
-  
-  print('Sequential results:');
-  print('  $result1');
-  print('  $result2');
-  print('  $result3');
-  
-  // Parallel execution
-  print('\nStarting parallel operations...');
-  List<Future<String>> parallelFutures = [
-    simulateAsyncOperation('Parallel 1', 1),
-    simulateAsyncOperation('Parallel 2', 2),
-    simulateAsyncOperation('Parallel 3', 1),
-  ];
-  
-  List<String> parallelResults = await Future.wait(parallelFutures);
-  print('Parallel results:');
-  parallelResults.forEach((result) => print('  $result'));
-}
-
-Future<String> simulateAsyncOperation(String name, int seconds) async {
-  print('  Starting $name...');
-  await Future.delayed(Duration(seconds: seconds));
-  return '$name completed in ${seconds}s';
-}
-
-// Real-world async/await examples
-class ApiService {
-  Future<Map<String, dynamic>> login(String username, String password) async {
-    print('Attempting login for $username...');
+  // POST request with body
+  static Future<HttpResponse> post(String url, {
+    Map<String, String>? headers,
+    String? body,
+    int timeout = defaultTimeout,
+  }) async {
+    print('=== HTTP POST Request ===');
+    print('URL: $url');
     
-    // Simulate network delay
-    await Future.delayed(Duration(seconds: 2));
+    try {
+      Uri uri = Uri.parse(url);
+      HttpClient client = HttpClient();
+      client.connectionTimeout = Duration(milliseconds: timeout);
+      
+      HttpClientRequest request = await client.postUrl(uri);
+      
+      // Set content type
+      request.headers.contentType = ContentType.json;
+      
+      // Add custom headers
+      if (headers != null) {
+        headers.forEach((key, value) {
+          request.headers.add(key, value);
+        });
+      }
+      
+      // Add body if provided
+      if (body != null) {
+        request.write(body);
+      }
+      
+      print('POST request sent with body length: ${body?.length ?? 0}');
+      
+      HttpClientResponse response = await request.close();
+      String responseBody = await response.transform(utf8.decoder).join();
+      
+      HttpResponse result = HttpResponse(
+        statusCode: response.statusCode,
+        body: responseBody,
+        headers: response.headers,
+        responseTime: 0, // Would need to track this
+      );
+      
+      client.close();
+      return result;
+      
+    } catch (e) {
+      print('POST request failed: $e');
+      rethrow;
+    }
+  }
+  
+  // Concurrent requests
+  static Future<List<HttpResponse>> concurrent(List<String> urls) async {
+    print('=== Concurrent HTTP Requests ===');
+    print('Making ${urls.length} concurrent requests...');
     
-    // Simulate authentication logic
-    if (username == 'admin' && password == 'password') {
-      return {
-        'success': true,
-        'token': 'jwt_token_12345',
-        'user': {
-          'id': 1,
-          'username': username,
-          'email': '$username@example.com'
+    Stopwatch stopwatch = Stopwatch()..start();
+    
+    // Create all requests simultaneously
+    List<Future<HttpResponse>> futures = urls.map((url) => get(url)).toList();
+    
+    // Wait for all to complete
+    List<HttpResponse> responses = await Future.wait(futures);
+    
+    stopwatch.stop();
+    
+    print('All ${urls.length} requests completed in ${stopwatch.elapsedMilliseconds}ms');
+    
+    return responses;
+  }
+  
+  // Request with retry logic
+  static Future<HttpResponse> getWithRetry(String url, {
+    int maxRetries = 3,
+    Duration retryDelay = const Duration(seconds: 1),
+  }) async {
+    print('=== HTTP GET with Retry ===');
+    
+    for (int attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        print('Attempt $attempt/$maxRetries');
+        return await get(url);
+      } catch (e) {
+        print('Attempt $attempt failed: $e');
+        
+        if (attempt == maxRetries) {
+          print('Max retries reached, giving up');
+          rethrow;
         }
-      };
-    } else {
-      throw Exception('Invalid credentials');
-    }
-  }
-  
-  Future<List<Map<String, dynamic>>> fetchUserPosts(String token) async {
-    print('Fetching user posts...');
-    
-    await Future.delayed(Duration(seconds: 1));
-    
-    return [
-      {'id': 1, 'title': 'First Post', 'content': 'Hello World!'},
-      {'id': 2, 'title': 'Second Post', 'content': 'Learning Dart'},
-      {'id': 3, 'title': 'Third Post', 'content': 'Async Programming'},
-    ];
-  }
-  
-  Future<Map<String, dynamic>> getUserProfile(String token) async {
-    print('Fetching user profile...');
-    
-    await Future.delayed(Duration(seconds: 1));
-    
-    return {
-      'name': 'John Doe',
-      'avatar': 'https://example.com/avatar.jpg',
-      'followers': 150,
-      'following': 75
-    };
-  }
-}
-
-Future<void> demonstrateRealWorldAsync() async {
-  print('=== Real World Async Example ===');
-  
-  ApiService apiService = ApiService();
-  
-  try {
-    // Step 1: Login
-    Map<String, dynamic> loginResult = await apiService.login('admin', 'password');
-    print('Login successful!');
-    
-    String token = loginResult['token'];
-    Map<String, dynamic> user = loginResult['user'];
-    print('Welcome, ${user['username']}!');
-    
-    // Step 2: Fetch data in parallel
-    print('\nFetching user data...');
-    Future<List<Map<String, dynamic>>> postsFuture = apiService.fetchUserPosts(token);
-    Future<Map<String, dynamic>> profileFuture = apiService.getUserProfile(token);
-    
-    // Wait for both operations to complete
-    List<dynamic> results = await Future.wait([postsFuture, profileFuture]);
-    List<Map<String, dynamic>> posts = results[0];
-    Map<String, dynamic> profile = results[1];
-    
-    // Display results
-    print('\nUser Profile:');
-    print('  Name: ${profile['name']}');
-    print('  Followers: ${profile['followers']}');
-    print('  Following: ${profile['following']}');
-    
-    print('\nUser Posts:');
-    for (var post in posts) {
-      print('  ${post['id']}. ${post['title']}');
+        
+        print('Retrying in ${retryDelay.inSeconds} seconds...');
+        await Future.delayed(retryDelay);
+      }
     }
     
-  } catch (e) {
-    print('Error occurred: $e');
+    throw Exception('This should never be reached');
   }
 }
 
-// Async function return types
-Future<String> asyncStringFunction() async {
-  await Future.delayed(Duration(seconds: 1));
-  return 'String result';
-}
-
-Future<int> asyncIntFunction() async {
-  await Future.delayed(Duration(seconds: 1));
-  return 42;
-}
-
-Future<void> asyncVoidFunction() async {
-  await Future.delayed(Duration(seconds: 1));
-  print('Void async function completed');
-}
-
-// Can also return Future directly without async/await
-Future<String> directFutureFunction() {
-  return Future.delayed(Duration(seconds: 1), () => 'Direct future result');
-}
-```
-
-## Streams
-
-Streams provide a way to handle asynchronous data sequences. Unlike Futures that provide a single value, Streams can emit multiple values over time.
-
-### Stream Types:
-- **Single-subscription streams**: Can only be listened to once
-- **Broadcast streams**: Can have multiple listeners
-
-```dart
-import 'dart:async';
-import 'dart:math';
-
-// Basic Stream usage
-void demonstrateStreamBasics() {
-  print('=== Stream Basics ===');
+class HttpResponse {
+  final int statusCode;
+  final String body;
+  final HttpHeaders headers;
+  final int responseTime;
   
-  // Creating streams
-  Stream<int> numberStream = Stream.fromIterable([1, 2, 3, 4, 5]);
-  Stream<int> periodicStream = Stream.periodic(
-    Duration(seconds: 1), 
-    (count) => count + 1
-  ).take(5);
+  HttpResponse({
+    required this.statusCode,
+    required this.body,
+    required this.headers,
+    required this.responseTime,
+  });
   
-  // Listening to streams
-  print('Numbers from iterable:');
-  numberStream.listen(
-    (number) => print('  Number: $number'),
-    onDone: () => print('  Number stream completed'),
-    onError: (error) => print('  Error: $error'),
-  );
+  bool get isSuccess => statusCode >= 200 && statusCode < 300;
   
-  print('\nPeriodic numbers:');
-  periodicStream.listen(
-    (number) => print('  Periodic: $number'),
-    onDone: () => print('  Periodic stream completed'),
-  );
-}
-
-// Stream transformations
-Future<void> demonstrateStreamTransformations() async {
-  print('=== Stream Transformations ===');
-  
-  // Create a stream of numbers
-  Stream<int> numberStream = Stream.fromIterable([1, 2, 3, 4, 5, 6, 7, 8, 9, 10]);
-  
-  // Map transformation
-  Stream<String> mappedStream = numberStream.map((number) => 'Number: $number');
-  
-  // Where filtering
-  Stream<int> evenNumbers = Stream.fromIterable([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-      .where((number) => number % 2 == 0);
-  
-  // Take and skip
-  Stream<int> limitedStream = Stream.fromIterable([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-      .skip(3)
-      .take(4);
-  
-  print('Mapped stream:');
-  await for (String value in mappedStream) {
-    print('  $value');
+  Map<String, dynamic>? get jsonBody {
+    try {
+      return json.decode(body);
+    } catch (e) {
+      return null;
+    }
   }
-  
-  print('\nEven numbers:');
-  await for (int number in evenNumbers) {
-    print('  $number');
-  }
-  
-  print('\nLimited stream (skip 3, take 4):');
-  await for (int number in limitedStream) {
-    print('  $number');
-  }
-  
-  // Complex transformation chain
-  print('\nComplex transformation:');
-  Stream<String> complexStream = Stream.fromIterable([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
-      .where((n) => n % 2 == 0)           // Filter even numbers
-      .map((n) => n * n)                  // Square them
-      .map((n) => 'Square: $n')           // Convert to string
-      .take(3);                           // Take first 3
-  
-  await for (String value in complexStream) {
-    print('  $value');
-  }
-}
-
-// Async generators for creating streams
-Stream<int> generateNumbers(int count) async* {
-  print('Starting number generation...');
-  for (int i = 1; i <= count; i++) {
-    await Future.delayed(Duration(milliseconds: 500));
-    print('Generating number $i');
-    yield i;
-  }
-  print('Number generation completed');
-}
-
-Stream<String> generateRandomWords() async* {
-  List<String> words = ['apple', 'banana', 'cherry', 'date', 'elderberry'];
-  Random random = Random();
-  
-  for (int i = 0; i < 10; i++) {
-    await Future.delayed(Duration(milliseconds: 300));
-    yield words[random.nextInt(words.length)];
-  }
-}
-
-Future<void> demonstrateAsyncGenerators() async {
-  print('=== Async Generators ===');
-  
-  print('Generated numbers:');
-  await for (int number in generateNumbers(5)) {
-    print('  Received: $number');
-  }
-  
-  print('\nRandom words:');
-  await for (String word in generateRandomWords()) {
-    print('  Word: $word');
-  }
-}
-
-// Real-world stream example: Chat application
-class ChatMessage {
-  final String user;
-  final String message;
-  final DateTime timestamp;
-  
-  ChatMessage(this.user, this.message, this.timestamp);
   
   @override
   String toString() {
-    return '[$timestamp] $user: $message';
+    return 'HttpResponse(status: $statusCode, time: ${responseTime}ms, body: ${body.length} chars)';
   }
-}
-
-class ChatRoom {
-  final StreamController<ChatMessage> _messageController = StreamController<ChatMessage>.broadcast();
-  final List<String> _users = [];
-  
-  Stream<ChatMessage> get messageStream => _messageController.stream;
-  
-  void addUser(String username) {
-    _users.add(username);
-    _messageController.add(ChatMessage(
-      'System', 
-      '$username joined the chat', 
-      DateTime.now()
-    ));
-  }
-  
-  void removeUser(String username) {
-    _users.remove(username);
-    _messageController.add(ChatMessage(
-      'System', 
-      '$username left the chat', 
-      DateTime.now()
-    ));
-  }
-  
-  void sendMessage(String user, String message) {
-    if (_users.contains(user)) {
-      _messageController.add(ChatMessage(user, message, DateTime.now()));
-    }
-  }
-  
-  void close() {
-    _messageController.close();
-  }
-  
-  List<String> get users => List.unmodifiable(_users);
-}
-
-Future<void> demonstrateChatRoom() async {
-  print('=== Chat Room Simulation ===');
-  
-  ChatRoom chatRoom = ChatRoom();
-  
-  // Listen to messages
-  StreamSubscription<ChatMessage> subscription = chatRoom.messageStream.listen(
-    (message) => print(message),
-    onDone: () => print('Chat room closed'),
-  );
-  
-  // Add users
-  chatRoom.addUser('Alice');
-  chatRoom.addUser('Bob');
-  chatRoom.addUser('Charlie');
-  
-  // Simulate conversation
-  await Future.delayed(Duration(milliseconds: 100));
-  chatRoom.sendMessage('Alice', 'Hello everyone!');
-  
-  await Future.delayed(Duration(milliseconds: 100));
-  chatRoom.sendMessage('Bob', 'Hi Alice! How are you?');
-  
-  await Future.delayed(Duration(milliseconds: 100));
-  chatRoom.sendMessage('Charlie', 'Great to see you all here!');
-  
-  await Future.delayed(Duration(milliseconds: 100));
-  chatRoom.sendMessage('Alice', 'I\'m doing well, thanks Bob!');
-  
-  // User leaves
-  await Future.delayed(Duration(milliseconds: 100));
-  chatRoom.removeUser('Charlie');
-  
-  await Future.delayed(Duration(milliseconds: 100));
-  chatRoom.sendMessage('Bob', 'See you later Charlie!');
-  
-  // Clean up
-  await Future.delayed(Duration(milliseconds: 100));
-  await subscription.cancel();
-  chatRoom.close();
 }
 ```
 
-## Stream Controllers
+### 🔄 Stream Implementation Deep Dive
 
-StreamControllers provide fine-grained control over streams, allowing you to manually add data, handle listeners, and manage stream lifecycle.
+Let's understand how Streams work internally:
 
 ```dart
-// Basic StreamController usage
-Future<void> demonstrateStreamController() async {
-  print('=== StreamController Demo ===');
+// Custom Stream implementation to understand internals
+class CustomStream<T> {
+  final StreamController<T> _controller = StreamController<T>();
+  late final Stream<T> _stream;
   
-  // Single-subscription controller
-  StreamController<String> controller = StreamController<String>();
+  CustomStream() {
+    _stream = _controller.stream;
+  }
   
-  // Listen to the stream
-  StreamSubscription<String> subscription = controller.stream.listen(
-    (data) => print('Received: $data'),
-    onError: (error) => print('Error: $error'),
-    onDone: () => print('Stream closed'),
-  );
+  // Stream getter
+  Stream<T> get stream => _stream;
   
   // Add data to stream
-  controller.add('Hello');
-  controller.add('World');
-  controller.add('from');
-  controller.add('StreamController');
+  void add(T data) {
+    if (!_controller.isClosed) {
+      _controller.add(data);
+    }
+  }
   
-  // Add error
-  controller.addError('Something went wrong!');
+  // Add error to stream
+  void addError(Object error) {
+    if (!_controller.isClosed) {
+      _controller.addError(error);
+    }
+  }
   
-  // Add more data
-  controller.add('Still working after error');
-  
-  // Close the stream
-  await Future.delayed(Duration(milliseconds: 100));
-  await controller.close();
-  
-  // Clean up
-  await subscription.cancel();
+  // Close stream
+  Future<void> close() async {
+    await _controller.close();
+  }
 }
 
-// Broadcast StreamController
-Future<void> demonstrateBroadcastController() async {
-  print('=== Broadcast StreamController ===');
-  
-  StreamController<int> broadcastController = StreamController<int>.broadcast();
-  
-  // Multiple listeners
-  StreamSubscription<int> listener1 = broadcastController.stream.listen(
-    (data) => print('Listener 1: $data'),
-  );
-  
-  StreamSubscription<int> listener2 = broadcastController.stream.listen(
-    (data) => print('Listener 2: $data'),
-  );
-  
-  StreamSubscription<int> listener3 = broadcastController.stream.listen(
-    (data) => print('Listener 3: $data'),
-  );
-  
-  // Add data - all listeners receive it
-  broadcastController.add(1);
-  broadcastController.add(2);
-  broadcastController.add(3);
-  
-  // Remove one listener
-  await listener2.cancel();
-  print('Listener 2 removed');
-  
-  broadcastController.add(4);
-  broadcastController.add(5);
-  
-  // Clean up
-  await Future.delayed(Duration(milliseconds: 100));
-  await listener1.cancel();
-  await listener3.cancel();
-  await broadcastController.close();
-}
-
-// Custom stream with StreamController
-class TemperatureSensor {
-  final StreamController<double> _temperatureController = StreamController<double>();
-  late Timer _timer;
-  final Random _random = Random();
-  bool _isActive = false;
-  
-  Stream<double> get temperatureStream => _temperatureController.stream;
-  
-  void startReading() {
-    if (_isActive) return;
+// Real-world example: File processing stream
+class FileProcessor {
+  static Stream<FileProcessingResult> processFiles(List<String> filePaths) async* {
+    print('=== File Processing Stream ===');
     
-    _isActive = true;
-    _timer = Timer.periodic(Duration(seconds: 1), (timer) {
-      // Simulate temperature reading (20-30 degrees with some variation)
-      double temperature = 20 + (_random.nextDouble() * 10);
-      _temperatureController.add(temperature);
-    });
-  }
-  
-  void stopReading() {
-    if (!_isActive) return;
-    
-    _isActive = false;
-    _timer.cancel();
-  }
-  
-  void dispose() {
-    stopReading();
-    _temperatureController.close();
-  }
-  
-  bool get isActive => _isActive;
-}
-
-Future<void> demonstrateTemperatureSensor() async {
-  print('=== Temperature Sensor Simulation ===');
-  
-  TemperatureSensor sensor = TemperatureSensor();
-  
-  // Listen to temperature readings
-  StreamSubscription<double> subscription = sensor.temperatureStream.listen(
-    (temperature) {
-      print('Temperature: ${temperature.toStringAsFixed(2)}°C');
+    for (int i = 0; i < filePaths.length; i++) {
+      String filePath = filePaths[i];
       
-      // Alert for high temperature
-      if (temperature > 28) {
-        print('  ⚠️  HIGH TEMPERATURE ALERT!');
+      try {
+        print('Processing file ${i + 1}/${filePaths.length}: $filePath');
+        
+        // Simulate file processing
+        await Future.delayed(Duration(milliseconds: 500));
+        
+        // Simulate reading file
+        File file = File(filePath);
+        bool exists = await file.exists();
+        
+        if (exists) {
+          int size = await file.length();
+          String content = await file.readAsString();
+          
+          yield FileProcessingResult(
+            filePath: filePath,
+            success: true,
+            size: size,
+            content: content,
+            processingTime: 500,
+          );
+        } else {
+          yield FileProcessingResult(
+            filePath: filePath,
+            success: false,
+            error: 'File not found',
+            processingTime: 500,
+          );
+        }
+        
+      } catch (e) {
+        yield FileProcessingResult(
+          filePath: filePath,
+          success: false,
+          error: e.toString(),
+          processingTime: 500,
+        );
       }
-    },
-    onDone: () => print('Temperature sensor stopped'),
-  );
-  
-  // Start reading
-  print('Starting temperature sensor...');
-  sensor.startReading();
-  
-  // Let it run for 5 seconds
-  await Future.delayed(Duration(seconds: 5));
-  
-  // Stop reading
-  print('Stopping temperature sensor...');
-  sensor.stopReading();
-  
-  // Clean up
-  await subscription.cancel();
-  sensor.dispose();
-}
-
-// StreamController with custom logic
-class EventBus {
-  final Map<String, StreamController<dynamic>> _controllers = {};
-  
-  Stream<T> on<T>(String eventType) {
-    _controllers[eventType] ??= StreamController<T>.broadcast();
-    return _controllers[eventType]!.stream.cast<T>();
-  }
-  
-  void emit<T>(String eventType, T data) {
-    if (_controllers.containsKey(eventType)) {
-      _controllers[eventType]!.add(data);
     }
   }
+}
+
+class FileProcessingResult {
+  final String filePath;
+  final bool success;
+  final int? size;
+  final String? content;
+  final String? error;
+  final int processingTime;
   
-  void dispose() {
-    for (var controller in _controllers.values) {
-      controller.close();
+  FileProcessingResult({
+    required this.filePath,
+    required this.success,
+    this.size,
+    this.content,
+    this.error,
+    required this.processingTime,
+  });
+  
+  @override
+  String toString() {
+    if (success) {
+      return 'FileProcessingResult(${filePath}: ${size} bytes, ${processingTime}ms)';
+    } else {
+      return 'FileProcessingResult(${filePath}: ERROR - ${error}, ${processingTime}ms)';
     }
-    _controllers.clear();
   }
-}
-
-class UserLoginEvent {
-  final String username;
-  final DateTime timestamp;
-  
-  UserLoginEvent(this.username, this.timestamp);
-  
-  @override
-  String toString() => 'UserLoginEvent($username at $timestamp)';
-}
-
-class MessageEvent {
-  final String message;
-  final String sender;
-  
-  MessageEvent(this.message, this.sender);
-  
-  @override
-  String toString() => 'MessageEvent("$message" from $sender)';
-}
-
-Future<void> demonstrateEventBus() async {
-  print('=== Event Bus Demo ===');
-  
-  EventBus eventBus = EventBus();
-  
-  // Listen to different event types
-  StreamSubscription<UserLoginEvent> loginSubscription = eventBus.on<UserLoginEvent>('user_login').listen(
-    (event) => print('Login: $event'),
-  );
-  
-  StreamSubscription<MessageEvent> messageSubscription = eventBus.on<MessageEvent>('message').listen(
-    (event) => print('Message: $event'),
-  );
-  
-  StreamSubscription<String> notificationSubscription = eventBus.on<String>('notification').listen(
-    (notification) => print('Notification: $notification'),
-  );
-  
-  // Emit events
-  eventBus.emit('user_login', UserLoginEvent('alice', DateTime.now()));
-  eventBus.emit('message', MessageEvent('Hello everyone!', 'alice'));
-  eventBus.emit('notification', 'New user joined');
-  
-  await Future.delayed(Duration(milliseconds: 100));
-  
-  eventBus.emit('user_login', UserLoginEvent('bob', DateTime.now()));
-  eventBus.emit('message', MessageEvent('Hi Alice!', 'bob'));
-  eventBus.emit('notification', 'Message received');
-  
-  // Clean up
-  await Future.delayed(Duration(milliseconds: 100));
-  await loginSubscription.cancel();
-  await messageSubscription.cancel();
-  await notificationSubscription.cancel();
-  eventBus.dispose();
 }
 ```
 
-## Error Handling in Async Code
-
-Proper error handling is crucial in asynchronous programming to create robust applications.
+### 🎯 Performance Considerations and Optimization
 
 ```dart
-// Basic error handling patterns
-Future<void> demonstrateAsyncErrorHandling() async {
-  print('=== Async Error Handling ===');
-  
-  // Try-catch with async/await
-  try {
-    String result = await riskyAsyncOperation();
-    print('Success: $result');
-  } catch (e) {
-    print('Caught error: $e');
-  } finally {
-    print('Finally block executed');
-  }
-  
-  // Future.catchError
-  riskyAsyncOperation()
-    .then((result) => print('Then: $result'))
-    .catchError((error) => print('CatchError: $error'));
-  
-  // Multiple error types
-  try {
-    await operationWithMultipleErrorTypes();
-  } on NetworkException catch (e) {
-    print('Network error: ${e.message}');
-  } on ValidationException catch (e) {
-    print('Validation error: ${e.message}');
-  } catch (e) {
-    print('Unknown error: $e');
-  }
-}
-
-Future<String> riskyAsyncOperation() async {
-  await Future.delayed(Duration(seconds: 1));
-  
-  // 50% chance of success
-  if (Random().nextBool()) {
-    return 'Operation successful!';
-  } else {
-    throw Exception('Operation failed!');
-  }
-}
-
-class NetworkException implements Exception {
-  final String message;
-  NetworkException(this.message);
-}
-
-class ValidationException implements Exception {
-  final String message;
-  ValidationException(this.message);
-}
-
-Future<void> operationWithMultipleErrorTypes() async {
-  await Future.delayed(Duration(milliseconds: 500));
-  
-  int random = Random().nextInt(3);
-  switch (random) {
-    case 0:
-      throw NetworkException('Network timeout');
-    case 1:
-      throw ValidationException('Invalid input data');
-    default:
-      throw Exception('Generic error');
-  }
-}
-
-// Error handling in streams
-Future<void> demonstrateStreamErrorHandling() async {
-  print('=== Stream Error Handling ===');
-  
-  StreamController<int> controller = StreamController<int>();
-  
-  // Listen with error handler
-  StreamSubscription<int> subscription = controller.stream.listen(
-    (data) => print('Data: $data'),
-    onError: (error) {
-      print('Stream error: $error');
-      // Stream continues after error handling
-    },
-    onDone: () => print('Stream completed'),
-  );
-  
-  // Add data and errors
-  controller.add(1);
-  controller.add(2);
-  controller.addError('First error');
-  controller.add(3);
-  controller.addError('Second error');
-  controller.add(4);
-  
-  await Future.delayed(Duration(milliseconds: 100));
-  await controller.close();
-  await subscription.cancel();
-}
-
-// Retry mechanisms
-Future<String> unstableNetworkCall() async {
-  await Future.delayed(Duration(seconds: 1));
-  
-  // 70% chance of failure
-  if (Random().nextDouble() < 0.7) {
-    throw NetworkException('Network request failed');
-  }
-  
-  return 'Data retrieved successfully';
-}
-
-Future<String> retryOperation(
-  Future<String> Function() operation,
-  {int maxRetries = 3, Duration delay = const Duration(seconds: 1)}
-) async {
-  int attempts = 0;
-  
-  while (attempts < maxRetries) {
-    try {
-      attempts++;
-      print('Attempt $attempts...');
-      return await operation();
-    } catch (e) {
-      print('Attempt $attempts failed: $e');
+// Performance optimization techniques
+class AsyncPerformanceOptimization {
+  // 1. Batch processing instead of individual operations
+  static Future<List<ProcessingResult>> batchProcess(List<String> items) async {
+    print('=== Batch Processing ===');
+    
+    const int batchSize = 10;
+    List<ProcessingResult> allResults = [];
+    
+    for (int i = 0; i < items.length; i += batchSize) {
+      int end = (i + batchSize < items.length) ? i + batchSize : items.length;
+      List<String> batch = items.sublist(i, end);
       
-      if (attempts >= maxRetries) {
-        print('Max retries reached. Giving up.');
-        rethrow;
-      }
+      print('Processing batch ${i ~/ batchSize + 1}: ${batch.length} items');
       
-      print('Retrying in ${delay.inSeconds} seconds...');
-      await Future.delayed(delay);
+      // Process batch concurrently
+      List<Future<ProcessingResult>> futures = batch.map((item) => processItem(item)).toList();
+      List<ProcessingResult> batchResults = await Future.wait(futures);
+      
+      allResults.addAll(batchResults);
+    }
+    
+    return allResults;
+  }
+  
+  static Future<ProcessingResult> processItem(String item) async {
+    await Future.delayed(Duration(milliseconds: 100));
+    return ProcessingResult(item, 'processed');
+  }
+  
+  // 2. Connection pooling simulation
+  static Future<void> demonstrateConnectionPooling() async {
+    print('=== Connection Pooling ===');
+    
+    ConnectionPool pool = ConnectionPool(maxConnections: 5);
+    
+    // Simulate multiple concurrent requests
+    List<Future<String>> futures = [];
+    for (int i = 1; i <= 20; i++) {
+      futures.add(pool.executeRequest('Request $i'));
+    }
+    
+    List<String> results = await Future.wait(futures);
+    results.forEach(print);
+    
+    await pool.close();
+  }
+  
+  // 3. Caching async results
+  static final Map<String, Future<String>> _cache = {};
+  
+  static Future<String> cachedAsyncOperation(String key) {
+    if (_cache.containsKey(key)) {
+      print('Cache hit for: $key');
+      return _cache[key]!;
+    }
+    
+    print('Cache miss for: $key');
+    Future<String> future = expensiveAsyncOperation(key);
+    _cache[key] = future;
+    return future;
+  }
+  
+  static Future<String> expensiveAsyncOperation(String key) async {
+    await Future.delayed(Duration(seconds: 2));
+    return 'Result for $key';
+  }
+}
+
+class ProcessingResult {
+  final String input;
+  final String result;
+  
+  ProcessingResult(this.input, this.result);
+  
+  @override
+  String toString() => 'ProcessingResult($input -> $result)';
+}
+
+class ConnectionPool {
+  final int maxConnections;
+  final Queue<Completer<Connection>> _waitingQueue = Queue();
+  final List<Connection> _availableConnections = [];
+  final List<Connection> _busyConnections = [];
+  
+  ConnectionPool({required this.maxConnections}) {
+    // Initialize pool with connections
+    for (int i = 0; i < maxConnections; i++) {
+      _availableConnections.add(Connection(i));
     }
   }
   
-  throw Exception('This should never be reached');
-}
-
-Future<void> demonstrateRetryMechanism() async {
-  print('=== Retry Mechanism ===');
+  Future<String> executeRequest(String request) async {
+    Connection connection = await _getConnection();
+    
+    try {
+      return await connection.execute(request);
+    } finally {
+      _returnConnection(connection);
+    }
+  }
   
-  try {
-    String result = await retryOperation(
-      unstableNetworkCall,
-      maxRetries: 5,
-      delay: Duration(milliseconds: 500),
-    );
-    print('Final result: $result');
-  } catch (e) {
-    print('Operation failed after all retries: $e');
+  Future<Connection> _getConnection() async {
+    if (_availableConnections.isNotEmpty) {
+      Connection connection = _availableConnections.removeAt(0);
+      _busyConnections.add(connection);
+      return connection;
+    }
+    
+    // No available connections, wait for one
+    Completer<Connection> completer = Completer();
+    _waitingQueue.add(completer);
+    return completer.future;
+  }
+  
+  void _returnConnection(Connection connection) {
+    _busyConnections.remove(connection);
+    
+    if (_waitingQueue.isNotEmpty) {
+      // Give connection to waiting request
+      Completer<Connection> completer = _waitingQueue.removeFirst();
+      _busyConnections.add(connection);
+      completer.complete(connection);
+    } else {
+      // Return to available pool
+      _availableConnections.add(connection);
+    }
+  }
+  
+  Future<void> close() async {
+    // Close all connections
+    for (Connection connection in _availableConnections) {
+      await connection.close();
+    }
+    for (Connection connection in _busyConnections) {
+      await connection.close();
+    }
   }
 }
 
-// Timeout handling
-Future<String> slowOperation() async {
-  await Future.delayed(Duration(seconds: 5));
-  return 'Slow operation completed';
-}
-
-Future<void> demonstrateTimeoutHandling() async {
-  print('=== Timeout Handling ===');
+class Connection {
+  final int id;
+  bool _isClosed = false;
   
-  try {
-    String result = await slowOperation().timeout(
-      Duration(seconds: 3),
-      onTimeout: () {
-        print('Operation timed out!');
-        return 'Default result due to timeout';
-      },
-    );
-    print('Result: $result');
-  } on TimeoutException catch (e) {
-    print('Timeout exception: $e');
+  Connection(this.id);
+  
+  Future<String> execute(String request) async {
+    if (_isClosed) throw Exception('Connection closed');
+    
+    print('Connection $id executing: $request');
+    await Future.delayed(Duration(milliseconds: 200));
+    return 'Response from connection $id for: $request';
   }
   
-  // Alternative timeout handling
-  try {
-    String result = await Future.any([
-      slowOperation(),
-      Future.delayed(Duration(seconds: 2), () => throw TimeoutException('Custom timeout', Duration(seconds: 2))),
-    ]);
-    print('Result: $result');
-  } on TimeoutException catch (e) {
-    print('Custom timeout: $e');
+  Future<void> close() async {
+    _isClosed = true;
+    print('Connection $id closed');
   }
 }
 ```
@@ -1048,7 +972,34 @@ Future<void> demonstrateTimeoutHandling() async {
 Isolates provide true parallelism in Dart by running code in separate memory spaces.
 
 ```dart
-import 'dart:isolate';
+// Helper function for compute operations
+Future<T> compute<T>(T Function(dynamic) callback, dynamic message) async {
+  ReceivePort receivePort = ReceivePort();
+  
+  await Isolate.spawn<Map<String, dynamic>>(
+    _computeImpl,
+    {
+      'callback': callback,
+      'message': message,
+      'sendPort': receivePort.sendPort,
+    },
+  );
+  
+  return await receivePort.first;
+}
+
+void _computeImpl<T>(Map<String, dynamic> args) {
+  T Function(dynamic) callback = args['callback'];
+  dynamic message = args['message'];
+  SendPort sendPort = args['sendPort'];
+  
+  try {
+    T result = callback(message);
+    sendPort.send(result);
+  } catch (e) {
+    sendPort.send(e);
+  }
+}
 
 // Basic isolate usage
 Future<void> demonstrateIsolates() async {
@@ -1106,528 +1057,101 @@ int factorial(int n) {
   if (n <= 1) return 1;
   return n * factorial(n - 1);
 }
-
-// Custom isolate with two-way communication
-Future<void> demonstrateIsolateCommunication() async {
-  print('=== Isolate Communication ===');
-  
-  // Create receive port for main isolate
-  ReceivePort mainReceivePort = ReceivePort();
-  
-  // Spawn isolate
-  Isolate isolate = await Isolate.spawn(
-    isolateEntryPoint,
-    mainReceivePort.sendPort,
-  );
-  
-  // Get send port from isolate
-  SendPort isolateSendPort = await mainReceivePort.first;
-  
-  // Create new receive port for responses
-  ReceivePort responsePort = ReceivePort();
-  
-  // Send computation request
-  isolateSendPort.send({
-    'command': 'compute',
-    'data': {'start': 1, 'end': 10, 'operation': 'square'},
-    'responsePort': responsePort.sendPort,
-  });
-  
-  // Wait for response
-  Map<String, dynamic> response = await responsePort.first;
-  print('Isolate response: $response');
-  
-  // Send stop command
-  isolateSendPort.send({'command': 'stop'});
-  
-  // Clean up
-  responsePort.close();
-  isolate.kill();
-}
-
-// Isolate entry point
-void isolateEntryPoint(SendPort mainSendPort) {
-  // Create receive port for isolate
-  ReceivePort isolateReceivePort = ReceivePort();
-  
-  // Send isolate's send port to main
-  mainSendPort.send(isolateReceivePort.sendPort);
-  
-  // Listen for messages
-  isolateReceivePort.listen((message) {
-    Map<String, dynamic> msg = message as Map<String, dynamic>;
-    String command = msg['command'];
-    
-    switch (command) {
-      case 'compute':
-        Map<String, dynamic> data = msg['data'];
-        SendPort responsePort = msg['responsePort'];
-        
-        // Perform computation
-        Map<String, dynamic> result = complexComputation(data);
-        
-        // Send response
-        responsePort.send(result);
-        break;
-        
-      case 'stop':
-        isolateReceivePort.close();
-        break;
-    }
-  });
-}
-
-// Isolate pool for multiple tasks
-class IsolatePool {
-  final int poolSize;
-  final List<IsolateWorker> _workers = [];
-  int _currentWorker = 0;
-  
-  IsolatePool(this.poolSize);
-  
-  Future<void> initialize() async {
-    for (int i = 0; i < poolSize; i++) {
-      IsolateWorker worker = IsolateWorker();
-      await worker.initialize();
-      _workers.add(worker);
-    }
-  }
-  
-  Future<T> execute<T>(T Function(dynamic) computation, dynamic data) async {
-    IsolateWorker worker = _workers[_currentWorker];
-    _currentWorker = (_currentWorker + 1) % poolSize;
-    return await worker.execute(computation, data);
-  }
-  
-  Future<void> dispose() async {
-    for (IsolateWorker worker in _workers) {
-      await worker.dispose();
-    }
-    _workers.clear();
-  }
-}
-
-class IsolateWorker {
-  Isolate? _isolate;
-  SendPort? _sendPort;
-  ReceivePort? _receivePort;
-  int _taskId = 0;
-  final Map<int, Completer> _pendingTasks = {};
-  
-  Future<void> initialize() async {
-    _receivePort = ReceivePort();
-    _isolate = await Isolate.spawn(_workerEntryPoint, _receivePort!.sendPort);
-    
-    // Get worker's send port
-    _sendPort = await _receivePort!.first;
-    
-    // Listen for responses
-    _receivePort!.listen((message) {
-      Map<String, dynamic> msg = message as Map<String, dynamic>;
-      int taskId = msg['taskId'];
-      dynamic result = msg['result'];
-      String? error = msg['error'];
-      
-      Completer? completer = _pendingTasks.remove(taskId);
-      if (completer != null) {
-        if (error != null) {
-          completer.completeError(error);
-        } else {
-          completer.complete(result);
-        }
-      }
-    });
-  }
-  
-  Future<T> execute<T>(T Function(dynamic) computation, dynamic data) async {
-    if (_sendPort == null) {
-      throw StateError('Worker not initialized');
-    }
-    
-    int taskId = _taskId++;
-    Completer<T> completer = Completer<T>();
-    _pendingTasks[taskId] = completer;
-    
-    _sendPort!.send({
-      'taskId': taskId,
-      'computation': computation,
-      'data': data,
-    });
-    
-    return completer.future;
-  }
-  
-  Future<void> dispose() async {
-    _isolate?.kill();
-    _receivePort?.close();
-  }
-  
-  static void _workerEntryPoint(SendPort mainSendPort) {
-    ReceivePort workerReceivePort = ReceivePort();
-    mainSendPort.send(workerReceivePort.sendPort);
-    
-    workerReceivePort.listen((message) {
-      Map<String, dynamic> msg = message as Map<String, dynamic>;
-      int taskId = msg['taskId'];
-      Function computation = msg['computation'];
-      dynamic data = msg['data'];
-      
-      try {
-        dynamic result = computation(data);
-        mainSendPort.send({
-          'taskId': taskId,
-          'result': result,
-        });
-      } catch (e) {
-        mainSendPort.send({
-          'taskId': taskId,
-          'error': e.toString(),
-        });
-      }
-    });
-  }
-}
 ```
-
-## Advanced Async Patterns
 
 ```dart
-// Debouncing and throttling
-class Debouncer {
-  final Duration delay;
-  Timer? _timer;
-  
-  Debouncer(this.delay);
-  
-  void call(void Function() action) {
-    _timer?.cancel();
-    _timer = Timer(delay, action);
-  }
-  
-  void dispose() {
-    _timer?.cancel();
-  }
+// Can also return Future directly without async/await
+Future<String> directFutureFunction() {
+  return Future.delayed(Duration(seconds: 1), () => 'Direct future result');
 }
 
-class Throttler {
-  final Duration interval;
-  DateTime? _lastExecuted;
-  
-  Throttler(this.interval);
-  
-  void call(void Function() action) {
-    DateTime now = DateTime.now();
-    
-    if (_lastExecuted == null || 
-        now.difference(_lastExecuted!) >= interval) {
-      _lastExecuted = now;
-      action();
-    }
-  }
+// Helper functions for the examples
+Future<String> authenticate() async {
+  await Future.delayed(Duration(seconds: 1));
+  return 'auth_token_12345';
 }
 
-Future<void> demonstrateDebounceThrottle() async {
-  print('=== Debounce and Throttle ===');
-  
-  // Debouncer example
-  Debouncer debouncer = Debouncer(Duration(milliseconds: 300));
-  
-  print('Debouncing rapid calls...');
-  for (int i = 1; i <= 5; i++) {
-    debouncer(() => print('Debounced action executed: $i'));
-    await Future.delayed(Duration(milliseconds: 100));
-  }
-  
-  // Wait for debounced action
-  await Future.delayed(Duration(milliseconds: 500));
-  
-  // Throttler example
-  Throttler throttler = Throttler(Duration(milliseconds: 300));
-  
-  print('\nThrottling rapid calls...');
-  for (int i = 1; i <= 5; i++) {
-    throttler(() => print('Throttled action executed: $i'));
-    await Future.delayed(Duration(milliseconds: 100));
-  }
-  
-  debouncer.dispose();
+Future<String> fetchUser(String token) async {
+  await Future.delayed(Duration(seconds: 1));
+  return 'user_data_for_$token';
 }
 
-// Async iterator pattern
-class AsyncDataProcessor {
-  final List<String> _data = ['item1', 'item2', 'item3', 'item4', 'item5'];
+// Helper classes for API examples
+class User {
+  final int id;
+  final String username;
+  final String email;
   
-  Stream<String> processData() async* {
-    for (String item in _data) {
-      await Future.delayed(Duration(milliseconds: 500));
-      
-      // Simulate processing
-      String processedItem = 'Processed: $item';
-      yield processedItem;
-    }
-  }
-  
-  Stream<Map<String, dynamic>> processDataWithMetadata() async* {
-    for (int i = 0; i < _data.length; i++) {
-      await Future.delayed(Duration(milliseconds: 300));
-      
-      yield {
-        'item': _data[i],
-        'index': i,
-        'progress': (i + 1) / _data.length,
-        'timestamp': DateTime.now().toIso8601String(),
-      };
-    }
-  }
+  User({required this.id, required this.username, required this.email});
 }
 
-Future<void> demonstrateAsyncIterator() async {
-  print('=== Async Iterator Pattern ===');
+class Post {
+  final int id;
+  final String title;
+  final String content;
   
-  AsyncDataProcessor processor = AsyncDataProcessor();
-  
-  print('Processing data...');
-  await for (String processed in processor.processData()) {
-    print('  $processed');
-  }
-  
-  print('\nProcessing with metadata...');
-  await for (Map<String, dynamic> item in processor.processDataWithMetadata()) {
-    print('  ${item['item']} - Progress: ${(item['progress'] * 100).toStringAsFixed(1)}%');
-  }
+  Post({required this.id, required this.title, required this.content});
 }
 
-// Circuit breaker pattern
-enum CircuitState { closed, open, halfOpen }
-
-class CircuitBreaker {
-  final int failureThreshold;
-  final Duration timeout;
-  final Duration retryPeriod;
+class ProcessedData {
+  final List<Post> posts;
+  final int totalWords;
   
-  CircuitState _state = CircuitState.closed;
-  int _failureCount = 0;
-  DateTime? _lastFailureTime;
-  
-  CircuitBreaker({
-    required this.failureThreshold,
-    required this.timeout,
-    required this.retryPeriod,
-  });
-  
-  Future<T> execute<T>(Future<T> Function() operation) async {
-    if (_state == CircuitState.open) {
-      if (DateTime.now().difference(_lastFailureTime!) < retryPeriod) {
-        throw Exception('Circuit breaker is OPEN');
-      } else {
-        _state = CircuitState.halfOpen;
-      }
-    }
-    
-    try {
-      T result = await operation().timeout(timeout);
-      _onSuccess();
-      return result;
-    } catch (e) {
-      _onFailure();
-      rethrow;
-    }
-  }
-  
-  void _onSuccess() {
-    _failureCount = 0;
-    _state = CircuitState.closed;
-  }
-  
-  void _onFailure() {
-    _failureCount++;
-    _lastFailureTime = DateTime.now();
-    
-    if (_failureCount >= failureThreshold) {
-      _state = CircuitState.open;
-    }
-  }
-  
-  CircuitState get state => _state;
-  int get failureCount => _failureCount;
+  ProcessedData({required this.posts, required this.totalWords});
 }
 
-Future<String> unreliableService() async {
-  await Future.delayed(Duration(milliseconds: 100));
-  
-  // 60% chance of failure
-  if (Random().nextDouble() < 0.6) {
-    throw Exception('Service temporarily unavailable');
-  }
-  
-  return 'Service response';
+// Helper functions for examples
+Future<User> fetchUser() async {
+  await Future.delayed(Duration(seconds: 1));
+  return User(id: 1, username: 'john_doe', email: 'john@example.com');
 }
 
-Future<void> demonstrateCircuitBreaker() async {
-  print('=== Circuit Breaker Pattern ===');
-  
-  CircuitBreaker circuitBreaker = CircuitBreaker(
-    failureThreshold: 3,
-    timeout: Duration(seconds: 2),
-    retryPeriod: Duration(seconds: 5),
-  );
-  
-  for (int i = 1; i <= 10; i++) {
-    try {
-      print('Attempt $i...');
-      String result = await circuitBreaker.execute(unreliableService);
-      print('  Success: $result');
-    } catch (e) {
-      print('  Failed: $e');
-      print('  Circuit state: ${circuitBreaker.state}');
-      print('  Failure count: ${circuitBreaker.failureCount}');
-    }
-    
-    await Future.delayed(Duration(milliseconds: 500));
+Future<List<Post>> fetchUserPosts(int userId) async {
+  await Future.delayed(Duration(seconds: 1));
+  return [
+    Post(id: 1, title: 'First Post', content: 'Hello World'),
+    Post(id: 2, title: 'Second Post', content: 'Learning Dart'),
+  ];
+}
+
+Future<ProcessedData> processPosts(List<Post> posts) async {
+  await Future.delayed(Duration(seconds: 1));
+  int totalWords = posts.fold(0, (sum, post) => sum + post.content.split(' ').length);
+  return ProcessedData(posts: posts, totalWords: totalWords);
+}
+
+Future<void> saveResult(ProcessedData data) async {
+  await Future.delayed(Duration(seconds: 1));
+  print('Saved ${data.posts.length} posts with ${data.totalWords} total words');
+}
+
+void handleError(dynamic error) {
+  print('Error handled: $error');
+}
+
+// Helper functions for stream examples
+Future<String> fetchData1() async {
+  await Future.delayed(Duration(seconds: 1));
+  return 'Data 1';
+}
+
+Future<String> fetchData2() async {
+  await Future.delayed(Duration(seconds: 2));
+  return 'Data 2';
+}
+
+Future<String> fetchData3() async {
+  await Future.delayed(Duration(seconds: 1));
+  return 'Data 3';
+}
+
+// Helper function for async operations
+Future<String> riskyOperation() async {
+  await Future.delayed(Duration(seconds: 1));
+  if (Random().nextBool()) {
+    return 'Success!';
+  } else {
+    throw Exception('Operation failed');
   }
 }
 ```
-
-## Best Practices
-
-### 1. Always Handle Errors
-```dart
-// ❌ Bad: No error handling
-Future<void> badExample() async {
-  String result = await riskyOperation();
-  print(result);
-}
-
-// ✅ Good: Proper error handling
-Future<void> goodExample() async {
-  try {
-    String result = await riskyOperation();
-    print(result);
-  } catch (e) {
-    print('Error: $e');
-    // Handle error appropriately
-  }
-}
-```
-
-### 2. Use async/await Instead of .then() for Readability
-```dart
-// ❌ Bad: Callback hell with .then()
-Future<void> badChaining() {
-  return fetchUser()
-    .then((user) => fetchUserPosts(user.id))
-    .then((posts) => processPosts(posts))
-    .then((result) => saveResult(result))
-    .catchError((error) => handleError(error));
-}
-
-// ✅ Good: Clean async/await
-Future<void> goodChaining() async {
-  try {
-    User user = await fetchUser();
-    List<Post> posts = await fetchUserPosts(user.id);
-    ProcessedData result = await processPosts(posts);
-    await saveResult(result);
-  } catch (error) {
-    handleError(error);
-  }
-}
-```
-
-### 3. Use Future.wait() for Parallel Operations
-```dart
-// ❌ Bad: Sequential execution when parallel is possible
-Future<void> sequentialExecution() async {
-  String data1 = await fetchData1();
-  String data2 = await fetchData2();
-  String data3 = await fetchData3();
-  // Total time: time1 + time2 + time3
-}
-
-// ✅ Good: Parallel execution
-Future<void> parallelExecution() async {
-  List<String> results = await Future.wait([
-    fetchData1(),
-    fetchData2(),
-    fetchData3(),
-  ]);
-  // Total time: max(time1, time2, time3)
-}
-```
-
-### 4. Properly Dispose Resources
-```dart
-// ✅ Good: Always dispose StreamControllers and subscriptions
-class DataService {
-  StreamController<String>? _controller;
-  StreamSubscription<String>? _subscription;
-  
-  void initialize() {
-    _controller = StreamController<String>();
-    _subscription = _controller!.stream.listen(handleData);
-  }
-  
-  void dispose() {
-    _subscription?.cancel();
-    _controller?.close();
-  }
-  
-  void handleData(String data) {
-    // Process data
-  }
-}
-```
-
-### 5. Use Timeouts for Network Operations
-```dart
-// ✅ Good: Always use timeouts for network calls
-Future<String> fetchDataWithTimeout() async {
-  try {
-    return await httpClient.get(url).timeout(
-      Duration(seconds: 10),
-      onTimeout: () => throw TimeoutException('Request timed out'),
-    );
-  } on TimeoutException {
-    return 'Default data';
-  }
-}
-```
-
-### 6. Handle Stream Errors Properly
-```dart
-// ✅ Good: Proper stream error handling
-void listenToStream() {
-  stream.listen(
-    (data) => processData(data),
-    onError: (error) {
-      print('Stream error: $error');
-      // Don't let errors crash the app
-    },
-    onDone: () {
-      print('Stream completed');
-      cleanup();
-    },
-  );
-}
-```
-
-### Summary
-
-Asynchronous programming in Dart provides powerful tools for building responsive, efficient applications:
-
-- **Futures** for single async operations
-- **Streams** for sequences of async data
-- **async/await** for readable async code
-- **Isolates** for CPU-intensive tasks
-- **Error handling** for robust applications
-- **Advanced patterns** for complex scenarios
-
-Key principles:
-1. Always handle errors
-2. Use appropriate async patterns
-3. Prefer async/await over callbacks
-4. Dispose resources properly
-5. Use timeouts for network operations
-6. Consider performance implications
-
-Master these concepts to build scalable, responsive Dart applications!
